@@ -1,0 +1,6 @@
+{
+  "name": "KayBiT_Html_Pdf",
+  "description": "Multiplatform document compiler and PDF study notes generator for HTML, TXT, MD, and MDX files with syntax highlighting, auto-TOC, and print stylesheets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
