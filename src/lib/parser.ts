@@ -1,5 +1,6 @@
 import { marked } from 'marked';
 import Prism from 'prismjs';
+import hljs from 'highlight.js';
 import 'prismjs/components/prism-typescript';
 import 'prismjs/components/prism-javascript';
 import 'prismjs/components/prism-jsx';
@@ -159,7 +160,19 @@ export function applyPrismHighlighting(htmlContent: string, showLineNumbers: boo
       .replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'");
 
-    const language = (lang || 'javascript').toLowerCase();
+    let language = (lang || '').toLowerCase().trim();
+    if (!language || ['text', 'code', 'plaintext'].includes(language)) {
+      try {
+        const detected = hljs.highlightAuto(rawCode);
+        if (detected && detected.language) {
+          language = detected.language.toLowerCase();
+        }
+      } catch {
+        language = 'javascript';
+      }
+    }
+    if (!language) language = 'javascript';
+
     const prismLang = Prism.languages[language] || Prism.languages.javascript;
     
     let highlighted = rawCode;

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import hljs from 'highlight.js';
 import { 
   FileText, 
   Code, 
@@ -23,7 +24,22 @@ import {
   Check,
   Code2,
   Edit3,
-  Trash2
+  Trash2,
+  Volume2,
+  VolumeX,
+  Play,
+  Pause,
+  Square,
+  RotateCcw,
+  Sliders,
+  AudioLines,
+  Mic,
+  Wand2,
+  CheckCircle,
+  Scissors,
+  Split,
+  Layers,
+  X
 } from 'lucide-react';
 import { Chapter, SupportedExtension } from '../types';
 import { calculateReadingStats } from '../lib/parser';
@@ -31,13 +47,142 @@ import { calculateReadingStats } from '../lib/parser';
 interface EditorViewProps {
   chapter: Chapter | null;
   onUpdateChapter: (id: string, updates: Partial<Chapter>) => void;
+  onSplitChapter?: (chapterId: string, newChapters: Partial<Chapter>[]) => void;
 }
 
 interface ParsedSegment {
   type: 'text' | 'code';
   content: string;
   lang?: string;
+  isAutoDetected?: boolean;
   codeIndex?: number;
+}
+
+export function detectCodeLanguage(code: string): string {
+  if (!code || !code.trim()) return 'plaintext';
+  try {
+    const res = hljs.highlightAuto(code);
+    if (res && res.language) {
+      return res.language.toLowerCase();
+    }
+  } catch (err) {
+    console.warn('Language auto-detection error:', err);
+  }
+  return 'plaintext';
+}
+
+export function formatLanguageName(lang: string): string {
+  if (!lang) return 'Text';
+  const map: Record<string, string> = {
+    js: 'JavaScript',
+    javascript: 'JavaScript',
+    ts: 'TypeScript',
+    typescript: 'TypeScript',
+    py: 'Python',
+    python: 'Python',
+    cpp: 'C++',
+    c: 'C',
+    cs: 'C#',
+    csharp: 'C#',
+    java: 'Java',
+    rs: 'Rust',
+    rust: 'Rust',
+    go: 'Go',
+    sql: 'SQL',
+    html: 'HTML',
+    css: 'CSS',
+    json: 'JSON',
+    bash: 'Bash',
+    sh: 'Bash',
+    shell: 'Bash',
+    xml: 'XML',
+    yaml: 'YAML',
+    yml: 'YAML',
+    md: 'Markdown',
+    markdown: 'Markdown',
+    mdx: 'MDX',
+    php: 'PHP',
+    rb: 'Ruby',
+    ruby: 'Ruby',
+    swift: 'Swift',
+    kt: 'Kotlin',
+    kotlin: 'Kotlin'
+  };
+  const lower = lang.toLowerCase();
+  return map[lower] || (lang.charAt(0).toUpperCase() + lang.slice(1));
+}
+
+export interface SplitSectionPreview {
+  title: string;
+  content: string;
+  wordCount: number;
+  readingTimeMinutes: number;
+}
+
+export function performSmartSplit(
+  chapterTitle: string,
+  content: string,
+  splitLevel: 'h2' | 'h3' | 'auto' = 'auto'
+): SplitSectionPreview[] {
+  if (!content || !content.trim()) return [];
+
+  const lines = content.split(/\r?\n/);
+  
+  let headingRegex: RegExp;
+  if (splitLevel === 'h2') {
+    headingRegex = /^##\s+(.+)$/;
+  } else if (splitLevel === 'h3') {
+    headingRegex = /^###?\s+(.+)$/;
+  } else {
+    const hasH2 = lines.some(line => /^##\s+/.test(line));
+    if (hasH2) {
+      headingRegex = /^##\s+(.+)$/;
+    } else {
+      headingRegex = /^###?\s+(.+)$/;
+    }
+  }
+
+  const sections: { title: string; lines: string[] }[] = [];
+  let currentTitle = chapterTitle;
+  let currentLines: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const match = line.match(headingRegex);
+
+    if (match) {
+      if (currentLines.join('\n').trim().length > 0) {
+        sections.push({
+          title: currentTitle,
+          lines: currentLines
+        });
+      }
+      
+      const cleanHeading = match[1].replace(/[*_`]/g, '').trim();
+      currentTitle = cleanHeading || `${chapterTitle} (Part ${sections.length + 1})`;
+      currentLines = [line];
+    } else {
+      currentLines.push(line);
+    }
+  }
+
+  if (currentLines.join('\n').trim().length > 0) {
+    sections.push({
+      title: currentTitle,
+      lines: currentLines
+    });
+  }
+
+  return sections.map((sec, idx) => {
+    const sectionContent = sec.lines.join('\n').trim();
+    const stats = calculateReadingStats(sectionContent);
+    return {
+      title: sec.title || `${chapterTitle} (Part ${idx + 1})`,
+      content: sectionContent,
+      wordCount: stats.wordCount,
+      readingTimeMinutes: stats.readingTimeMinutes
+    };
+  });
 }
 
 function parseContentSegments(content: string) {
@@ -54,10 +199,17 @@ function parseContentSegments(content: string) {
         content: content.slice(lastIndex, match.index),
       });
     }
+
+    const rawLang = match[1] ? match[1].trim() : '';
+    const codeContent = match[2];
+    const isUnspecified = !rawLang || ['text', 'code', 'plaintext'].includes(rawLang.toLowerCase());
+    const detected = isUnspecified ? detectCodeLanguage(codeContent) : rawLang;
+
     segments.push({
       type: 'code',
-      lang: match[1] || 'text',
-      content: match[2],
+      lang: detected,
+      isAutoDetected: isUnspecified && detected !== 'plaintext',
+      content: codeContent,
       codeIndex: codeCount++,
     });
     lastIndex = regex.lastIndex;
@@ -73,11 +225,191 @@ function parseContentSegments(content: string) {
   return { segments, totalCodeBlocks: codeCount };
 }
 
-export const EditorView: React.FC<EditorViewProps> = ({ chapter, onUpdateChapter }) => {
+function cleanTextForSpeech(title: string, rawContent: string): string {
+  if (!rawContent && !title) return '';
+  let text = `Chapter: ${title}.\n\n` + (rawContent || '');
+  return text
+    .replace(/```[\s\S]*?```/g, ' [Code block omitted from speech] ')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/#{1,6}\s+/g, '')
+    .replace(/[*_]{1,3}([^*_]+)[*_]{1,3}/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/:::[a-z]+\[([^\]]+)\]([\s\S]*?):::/g, '$1. $2')
+    .replace(/[-*+]\s+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export const EditorView: React.FC<EditorViewProps> = ({ chapter, onUpdateChapter, onSplitChapter }) => {
   const [activeTab, setActiveTab] = useState<'editor' | 'metadata'>('editor');
   const [viewMode, setViewMode] = useState<'raw' | 'folding'>('folding');
   const [collapsedBlocks, setCollapsedBlocks] = useState<Record<number, boolean>>({});
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [autoDetectToast, setAutoDetectToast] = useState<string | null>(null);
+
+  // Smart Chapter Splitter State
+  const [isSmartSplitModalOpen, setIsSmartSplitModalOpen] = useState(false);
+  const [splitLevel, setSplitLevel] = useState<'h2' | 'h3' | 'auto'>('auto');
+  const [addPartTags, setAddPartTags] = useState(true);
+
+  // Text-To-Speech (TTS) Web Speech API State & Controls (Persisted to localStorage)
+  const [showTtsPanel, setShowTtsPanel] = useState(false);
+  const [isPlayingSpeech, setIsPlayingSpeech] = useState(false);
+  const [isPausedSpeech, setIsPausedSpeech] = useState(false);
+  const [speechRate, setSpeechRate] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('kaybit_tts_rate');
+      if (saved) {
+        const parsed = parseFloat(saved);
+        if (!isNaN(parsed) && parsed >= 0.5 && parsed <= 2.0) return parsed;
+      }
+    }
+    return 1.0;
+  });
+  const [speechPitch, setSpeechPitch] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('kaybit_tts_pitch');
+      if (saved) {
+        const parsed = parseFloat(saved);
+        if (!isNaN(parsed) && parsed >= 0.5 && parsed <= 1.5) return parsed;
+      }
+    }
+    return 1.0;
+  });
+  const [speechVoices, setSpeechVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedVoiceURI, setSelectedVoiceURI] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('kaybit_tts_voice') || '';
+    }
+    return '';
+  });
+  const [speechProgress, setSpeechProgress] = useState<number>(0);
+
+  // Persist TTS rate, pitch, and selected voice to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('kaybit_tts_rate', speechRate.toString());
+    }
+  }, [speechRate]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('kaybit_tts_pitch', speechPitch.toString());
+    }
+  }, [speechPitch]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && selectedVoiceURI) {
+      localStorage.setItem('kaybit_tts_voice', selectedVoiceURI);
+    }
+  }, [selectedVoiceURI]);
+
+  // Load available SpeechSynthesis Voices
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      const loadVoices = () => {
+        const voices = window.speechSynthesis.getVoices();
+        setSpeechVoices(voices);
+        if (voices.length > 0) {
+          const savedVoice = localStorage.getItem('kaybit_tts_voice');
+          const foundSaved = savedVoice ? voices.find(v => (v.voiceURI || v.name) === savedVoice) : null;
+          if (foundSaved) {
+            setSelectedVoiceURI(foundSaved.voiceURI || foundSaved.name);
+          } else if (!selectedVoiceURI) {
+            const defaultVoice = voices.find(v => v.lang.startsWith('en')) || voices[0];
+            setSelectedVoiceURI(defaultVoice.voiceURI || defaultVoice.name);
+          }
+        }
+      };
+      loadVoices();
+      if (window.speechSynthesis.onvoiceschanged !== undefined) {
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+      }
+    }
+  }, []);
+
+  // Stop speech when chapter changes or component unmounts
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      setIsPlayingSpeech(false);
+      setIsPausedSpeech(false);
+      setSpeechProgress(0);
+    }
+    return () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, [chapter?.id]);
+
+  const speakCurrentChapter = (restart = false) => {
+    if (!chapter || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+
+    if (isPausedSpeech && !restart) {
+      window.speechSynthesis.resume();
+      setIsPausedSpeech(false);
+      setIsPlayingSpeech(true);
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+
+    const cleanText = cleanTextForSpeech(chapter.title, chapter.content);
+    if (!cleanText) return;
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = speechRate;
+    utterance.pitch = speechPitch;
+
+    if (selectedVoiceURI && speechVoices.length > 0) {
+      const matchVoice = speechVoices.find(v => (v.voiceURI || v.name) === selectedVoiceURI);
+      if (matchVoice) {
+        utterance.voice = matchVoice;
+      }
+    }
+
+    utterance.onboundary = (event) => {
+      if (event.charIndex !== undefined && cleanText.length > 0) {
+        const pct = Math.min(100, Math.round((event.charIndex / cleanText.length) * 100));
+        setSpeechProgress(pct);
+      }
+    };
+
+    utterance.onend = () => {
+      setIsPlayingSpeech(false);
+      setIsPausedSpeech(false);
+      setSpeechProgress(100);
+    };
+
+    utterance.onerror = (err) => {
+      console.error("TTS Speech error:", err);
+      setIsPlayingSpeech(false);
+      setIsPausedSpeech(false);
+    };
+
+    window.speechSynthesis.speak(utterance);
+    setIsPlayingSpeech(true);
+    setIsPausedSpeech(false);
+    setSpeechProgress(0);
+  };
+
+  const pauseSpeech = () => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.pause();
+      setIsPausedSpeech(true);
+      setIsPlayingSpeech(false);
+    }
+  };
+
+  const stopSpeech = () => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      setIsPlayingSpeech(false);
+      setIsPausedSpeech(false);
+      setSpeechProgress(0);
+    }
+  };
 
   if (!chapter) {
     return (
@@ -133,6 +465,92 @@ export const EditorView: React.FC<EditorViewProps> = ({ chapter, onUpdateChapter
     navigator.clipboard.writeText(code);
     setCopiedIndex(index);
     setTimeout(() => setCopiedIndex(null), 2000);
+  };
+
+  const handleAutoDetectCodeLanguages = () => {
+    if (!chapter) return;
+    const rawContent = chapter.content || '';
+    const detectedLangsSet = new Set<string>();
+
+    const updatedContent = rawContent.replace(/```(\w*)\r?\n([\s\S]*?)```/g, (_, rawLang, codeContent) => {
+      const isUnspecified = !rawLang || ['text', 'code', 'plaintext'].includes(rawLang.trim().toLowerCase());
+      const langToUse = isUnspecified ? detectCodeLanguage(codeContent) : rawLang.trim().toLowerCase();
+
+      if (langToUse && langToUse !== 'plaintext') {
+        detectedLangsSet.add(formatLanguageName(langToUse));
+      }
+
+      return `\`\`\`${langToUse}\n${codeContent}\`\`\``;
+    });
+
+    const stats = calculateReadingStats(updatedContent);
+    const detectedList = Array.from(detectedLangsSet);
+    const langString = detectedList.length > 0 ? detectedList.join(', ') : (chapter.metadata.language || 'Markdown / Text');
+
+    const existingTags = chapter.metadata.tags || [];
+    const updatedTags = Array.from(new Set([...existingTags, ...detectedList]));
+
+    onUpdateChapter(chapter.id, {
+      content: updatedContent,
+      metadata: {
+        ...chapter.metadata,
+        wordCount: stats.wordCount,
+        readingTimeMinutes: stats.readingTimeMinutes,
+        language: langString,
+        tags: updatedTags
+      }
+    });
+
+    const toastText = detectedList.length > 0
+      ? `Auto-detected ${detectedList.length} code languages: ${langString}. Updated chapter metadata & tags!`
+      : `Language auto-detection complete. Primary chapter language: ${langString}.`;
+
+    setAutoDetectToast(toastText);
+    setTimeout(() => setAutoDetectToast(null), 3800);
+  };
+
+  const handleConfirmSmartSplit = () => {
+    if (!chapter) return;
+    const splitSections = performSmartSplit(chapter.title, chapter.content || '', splitLevel);
+    if (splitSections.length <= 1) {
+      setAutoDetectToast("No H2/H3 heading boundaries found to split this chapter.");
+      setTimeout(() => setAutoDetectToast(null), 3500);
+      setIsSmartSplitModalOpen(false);
+      return;
+    }
+
+    const newChaptersList: Partial<Chapter>[] = splitSections.map((sec, idx) => {
+      const existingTags = chapter.metadata?.tags || ['Notes'];
+      const partTag = `Part ${idx + 1}`;
+      const updatedTags = addPartTags ? Array.from(new Set([...existingTags, partTag])) : existingTags;
+
+      return {
+        title: sec.title,
+        content: sec.content,
+        metadata: {
+          ...chapter.metadata,
+          wordCount: sec.wordCount,
+          readingTimeMinutes: sec.readingTimeMinutes,
+          tags: updatedTags
+        }
+      };
+    });
+
+    if (onSplitChapter) {
+      onSplitChapter(chapter.id, newChaptersList);
+      setAutoDetectToast(`Smart Split: Separated chapter into ${splitSections.length} smaller sub-chapters!`);
+      setTimeout(() => setAutoDetectToast(null), 4000);
+    } else {
+      onUpdateChapter(chapter.id, {
+        title: newChaptersList[0].title,
+        content: newChaptersList[0].content,
+        metadata: newChaptersList[0].metadata
+      });
+      setAutoDetectToast(`Smart Split complete: Updated chapter with Part 1.`);
+      setTimeout(() => setAutoDetectToast(null), 3500);
+    }
+
+    setIsSmartSplitModalOpen(false);
   };
 
   const handleUpdateSegment = (segmentIndex: number, newContent: string, newLang?: string) => {
@@ -214,8 +632,25 @@ export const EditorView: React.FC<EditorViewProps> = ({ chapter, onUpdateChapter
           </select>
         </div>
 
+        {/* Text-to-Speech Web Speech API Button */}
+        <button
+          onClick={() => setShowTtsPanel(prev => !prev)}
+          className={`flex items-center gap-1.5 px-3 py-1 rounded-lg border text-xs font-semibold transition-all shrink-0 ${
+            showTtsPanel || isPlayingSpeech || isPausedSpeech
+              ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+              : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300'
+          }`}
+          title="Read Chapter Aloud with Web Speech API"
+        >
+          <Volume2 className={`w-3.5 h-3.5 ${isPlayingSpeech ? 'text-amber-400 animate-pulse' : 'text-slate-400'}`} />
+          <span className="hidden sm:inline">Text-to-Speech</span>
+          {isPlayingSpeech && (
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+          )}
+        </button>
+
         {/* Tab Toggle */}
-        <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-xs">
+        <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-xs shrink-0">
           <button
             onClick={() => setActiveTab('editor')}
             className={`px-3 py-1 rounded-md font-medium transition-all ${
@@ -234,6 +669,184 @@ export const EditorView: React.FC<EditorViewProps> = ({ chapter, onUpdateChapter
           </button>
         </div>
       </div>
+
+      {/* Text-to-Speech Web Speech API Interactive Controls Panel */}
+      {showTtsPanel && (
+        <div className="bg-slate-900 border-b border-slate-800 p-3.5 space-y-3 animate-fade-in text-slate-200">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <AudioLines className="w-4 h-4 text-amber-400" />
+              <h4 className="text-xs font-bold uppercase tracking-wider text-white">
+                Chapter Text-to-Speech Audio Reader
+              </h4>
+              {isPlayingSpeech && (
+                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30 text-[10px] font-semibold text-amber-300 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                  Reading Aloud
+                </span>
+              )}
+              {isPausedSpeech && (
+                <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-semibold text-slate-300">
+                  Paused
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {/* Play / Pause / Stop main controls */}
+              {isPlayingSpeech ? (
+                <button
+                  onClick={pauseSpeech}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow-xs transition-colors"
+                >
+                  <Pause className="w-3.5 h-3.5 fill-current" />
+                  <span>Pause</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => speakCurrentChapter(false)}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-xs transition-colors"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span>{isPausedSpeech ? 'Resume' : 'Read Chapter'}</span>
+                </button>
+              )}
+
+              {(isPlayingSpeech || isPausedSpeech) && (
+                <button
+                  onClick={stopSpeech}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-300 text-xs font-medium transition-colors"
+                  title="Stop Speech"
+                >
+                  <Square className="w-3.5 h-3.5 fill-current" />
+                  <span>Stop</span>
+                </button>
+              )}
+
+              <button
+                onClick={() => setShowTtsPanel(false)}
+                className="text-xs text-slate-400 hover:text-white px-2 py-1 rounded bg-slate-800 hover:bg-slate-700"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          {/* Sliders & Voice Select Row */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-800/80">
+            {/* Speech Rate Control */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                  Speed Rate ({speechRate.toFixed(2)}x)
+                </label>
+                <div className="flex items-center gap-1">
+                  {[0.75, 1.0, 1.25, 1.5, 2.0].map(r => (
+                    <button
+                      key={r}
+                      onClick={() => {
+                        setSpeechRate(r);
+                        if (isPlayingSpeech) speakCurrentChapter(true);
+                      }}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                        speechRate === r
+                          ? 'bg-amber-500 text-slate-950 font-bold'
+                          : 'bg-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {r}x
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <input
+                type="range"
+                min="0.5"
+                max="2.0"
+                step="0.05"
+                value={speechRate}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setSpeechRate(val);
+                  if (isPlayingSpeech) speakCurrentChapter(true);
+                }}
+                className="w-full accent-amber-500 bg-slate-800 rounded-lg h-2 cursor-pointer"
+              />
+            </div>
+
+            {/* Speech Pitch Control */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                  Voice Pitch ({speechPitch.toFixed(2)})
+                </label>
+                <button
+                  onClick={() => {
+                    setSpeechPitch(1.0);
+                    if (isPlayingSpeech) speakCurrentChapter(true);
+                  }}
+                  className="text-[10px] text-indigo-400 hover:underline font-mono"
+                >
+                  Reset (1.0)
+                </button>
+              </div>
+              <input
+                type="range"
+                min="0.5"
+                max="1.5"
+                step="0.05"
+                value={speechPitch}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setSpeechPitch(val);
+                  if (isPlayingSpeech) speakCurrentChapter(true);
+                }}
+                className="w-full accent-amber-500 bg-slate-800 rounded-lg h-2 cursor-pointer"
+              />
+            </div>
+
+            {/* Speech Voice Selection */}
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-400 mb-1 uppercase tracking-wider">
+                Voice Accent
+              </label>
+              <select
+                value={selectedVoiceURI}
+                onChange={(e) => {
+                  setSelectedVoiceURI(e.target.value);
+                  if (isPlayingSpeech) speakCurrentChapter(true);
+                }}
+                className="w-full px-2 py-1 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white outline-none focus:border-amber-500"
+              >
+                {speechVoices.map((voice) => (
+                  <option key={voice.voiceURI || voice.name} value={voice.voiceURI || voice.name}>
+                    {voice.name} ({voice.lang})
+                  </option>
+                ))}
+                {speechVoices.length === 0 && (
+                  <option value="">Default System Voice</option>
+                )}
+              </select>
+            </div>
+          </div>
+
+          {/* Reading Progress Bar */}
+          {(isPlayingSpeech || isPausedSpeech || speechProgress > 0) && (
+            <div className="space-y-1 pt-1">
+              <div className="flex justify-between text-[10px] font-mono text-slate-400">
+                <span>Audio Speech Position</span>
+                <span>{speechProgress}%</span>
+              </div>
+              <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                <div
+                  className="bg-gradient-to-r from-amber-500 to-emerald-400 h-full transition-all duration-300"
+                  style={{ width: `${speechProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {activeTab === 'editor' ? (
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -276,6 +889,15 @@ export const EditorView: React.FC<EditorViewProps> = ({ chapter, onUpdateChapter
             >
               <Code className="w-3 h-3 text-indigo-400" />
               <span>Code Block</span>
+            </button>
+
+            <button
+              onClick={handleAutoDetectCodeLanguages}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-cyan-950/70 hover:bg-cyan-900 text-cyan-300 border border-cyan-800/60 shrink-0 font-semibold transition-all active:scale-95"
+              title="Auto-detect code languages using highlight.js AI engine and update chapter metadata"
+            >
+              <Wand2 className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+              <span>Auto-Detect Languages</span>
             </button>
 
             <div className="h-4 w-px bg-slate-800 mx-1 shrink-0" />
@@ -416,6 +1038,13 @@ export const EditorView: React.FC<EditorViewProps> = ({ chapter, onUpdateChapter
                           placeholder="lang"
                           className="w-20 px-1.5 py-0.5 bg-slate-950 border border-slate-800 rounded text-[11px] font-mono font-bold text-indigo-300 uppercase outline-none focus:border-indigo-500"
                         />
+
+                        {segment.isAutoDetected && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800/60 font-mono font-medium flex items-center gap-1" title="Language automatically detected with highlight.js">
+                            <Wand2 className="w-2.5 h-2.5 text-cyan-400" />
+                            <span>Auto</span>
+                          </span>
+                        )}
 
                         <span className="text-xs text-slate-400 font-mono">
                           {lineCount} {lineCount === 1 ? 'line' : 'lines'}
@@ -596,6 +1225,14 @@ export const EditorView: React.FC<EditorViewProps> = ({ chapter, onUpdateChapter
               />
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Auto-Detect Language Toast Notification */}
+      {autoDetectToast && (
+        <div className="fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-xl bg-slate-900 text-white border border-cyan-500/60 shadow-2xl flex items-center gap-2.5 text-xs font-semibold animate-fade-in backdrop-blur-md">
+          <CheckCircle className="w-4 h-4 text-cyan-400 shrink-0" />
+          <span>{autoDetectToast}</span>
         </div>
       )}
 

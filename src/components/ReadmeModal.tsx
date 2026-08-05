@@ -11,37 +11,51 @@ export const ReadmeModal: React.FC<ReadmeModalProps> = ({ isOpen, onClose }) => 
 
   if (!isOpen) return null;
 
-  const readmeMarkdown = `# KayBiT_Html_Pdf - Multiplatform Student Notes Compiler
+  const readmeMarkdown = `# KayBiT_Html_Pdf — Cross-Platform Student Notes & Vector PDF Compiler
 
-KayBiT_Html_Pdf converts HTML, .txt, .md, and .mdx files into styled student .pdf programming notes with syntax highlighting, auto-generated Table of Contents, and custom study callout boxes.
+**KayBiT_Html_Pdf** converts HTML, .txt, .md, and .mdx files into styled student .pdf programming notes with syntax highlighting, auto-generated Table of Contents, interactive canvas overlays, and custom study callout boxes.
 
 ---
 
-## 1. Hybrid Multiplatform Architecture
+## 🏛️ 1. Hybrid Multiplatform Architecture
 
-- **Web Mode:** Offloads rendering to a server-side Node.js microservice running Puppeteer (\`/api/generate-pdf\`). Produces true vector text PDFs with selectable text, clickable TOC anchors, and exact CSS margins.
-- **Desktop Mode (Electron):** Uses Electron's native \`webContents.printToPDF()\`. Runs locally on Chromium to print flawless vector PDFs without needing an internet connection.
+- **Web Mode:** Offloads rendering to a server-side Node.js microservice running Puppeteer (\`/api/generate-pdf\`). Produces true vector text PDFs with selectable text, clickable TOC anchors, password protection, watermarks, and exact CSS margins.
+- **Desktop Mode (Electron):** Uses Electron's native \`webContents.printToPDF()\`. Runs locally on Chromium to print vector PDFs offline without needing an internet connection.
 - **Mobile Mode (Capacitor):** Sends styled HTML to native iOS/Android print preview engine via Capacitor Printer Plugin for instant "Save as PDF".
 
 ---
 
-## 2. Cross-Platform Packaging Guide
+## 📦 2. Cross-Platform Packaging Guide
 
-### A. Web Microservice Deployment (Node.js + Express + Vite)
+### A. Web Microservice & Docker Deployment (Node.js + Express + Vite)
 
 1. **Install Dependencies:**
    \`\`\`bash
    npm install
    \`\`\`
 
-2. **Build Production Assets & Server:**
+2. **Build Production Assets & Express Server:**
    \`\`\`bash
    npm run build
    \`\`\`
 
-3. **Launch Server:**
+3. **Launch Production Server:**
    \`\`\`bash
    npm start
+   \`\`\`
+
+4. **Docker Container Build:**
+   \`\`\`dockerfile
+   FROM node:20-slim
+   RUN apt-get update && apt-get install -y chromium fonts-liberation libnss3 libgbm1 libasound2 --no-install-recommends
+   ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+   WORKDIR /app
+   COPY package*.json ./
+   RUN npm ci --only=production
+   COPY . .
+   RUN npm run build
+   EXPOSE 3000
+   CMD ["npm", "start"]
    \`\`\`
 
 ---
@@ -60,8 +74,8 @@ KayBiT_Html_Pdf converts HTML, .txt, .md, and .mdx files into styled student .pd
 
    function createWindow() {
      const win = new BrowserWindow({
-       width: 1280,
-       height: 800,
+       width: 1360,
+       height: 860,
        webPreferences: {
          preload: path.join(__dirname, 'preload.js'),
          nodeIntegration: false,
@@ -76,22 +90,22 @@ KayBiT_Html_Pdf converts HTML, .txt, .md, and .mdx files into styled student .pd
      }
 
      // Native Vector PDF Printing IPC Handler
-     ipcMain.handle('print-to-pdf', async () => {
-       const pdfData = await win.webContents.printToPDF({
+     ipcMain.handle('generate-native-pdf', async (event, options) => {
+       const pdfBuffer = await win.webContents.printToPDF({
          printBackground: true,
-         pageSize: 'A4'
+         pageSize: options?.pageSize || 'A4'
        });
-       return pdfData;
+       return { success: true, data: pdfBuffer };
      });
    }
 
    app.whenReady().then(createWindow);
    \`\`\`
 
-3. **Build Desktop App Installers:**
+3. **Build Desktop Installers:**
    \`\`\`bash
-   # Build for current OS (macOS .dmg / Windows .exe / Linux .AppImage)
-   npx electron-builder
+   # Build for macOS (.dmg), Windows (.exe), and Linux (.AppImage)
+   npx electron-builder --mac --win --linux
    \`\`\`
 
 ---
@@ -101,7 +115,7 @@ KayBiT_Html_Pdf converts HTML, .txt, .md, and .mdx files into styled student .pd
 1. **Install Capacitor Dependencies:**
    \`\`\`bash
    npm install @capacitor/core @capacitor/cli @capacitor-community/printer
-   npx cap init KayBiT_Html_Pdf com.kaybit.htmlpdf
+   npx cap init KayBiT_Html_Pdf com.kaybit.htmlpdf --web-dir dist
    \`\`\`
 
 2. **Build Web App & Sync to Mobile Containers:**
@@ -112,7 +126,7 @@ KayBiT_Html_Pdf converts HTML, .txt, .md, and .mdx files into styled student .pd
    npx cap sync
    \`\`\`
 
-3. **Open Native IDEs to Run/Publish:**
+3. **Open Native IDEs to Compile & Publish:**
    \`\`\`bash
    # Open Xcode for iOS
    npx cap open ios
@@ -126,7 +140,10 @@ KayBiT_Html_Pdf converts HTML, .txt, .md, and .mdx files into styled student .pd
 ## 3. Student Features Checklist
 
 - [x] Syntax Highlighting with 8 Themes (Dracula, One Dark, GitHub Light, Nord, Monokai, VS Code Dark, Night Owl, Solarized Light)
-- [x] Auto-Generated Table of Contents (scans H1, H2, H3 tags)
+- [x] Auto-Generated Table of Contents (scans H1, H2, H3 tags) & TOC Scroll Sync
+- [x] Interactive Canvas Annotation Overlay (Highlighter, Pen, Eraser, Swatches)
+- [x] Quick PDF Side Pane Direct Download
+- [x] PDF Export History Log with Browser Local Persistence
 - [x] Metadata Header Banner (Source file date, query name, language, word count)
 - [x] Custom Student Callout Boxes (:::summary, :::warning, :::tip, :::code)
 - [x] Page Break Protection (\`break-inside: avoid\` for code snippets)

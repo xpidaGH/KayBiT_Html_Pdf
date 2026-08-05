@@ -13,7 +13,8 @@ import {
   HelpCircle,
   FileCode,
   Loader2,
-  History
+  History,
+  Package
 } from 'lucide-react';
 import { PlatformMode } from '../types';
 
@@ -22,6 +23,7 @@ interface HeaderProps {
   setPlatformMode: (mode: PlatformMode) => void;
   onOpenSettings: () => void;
   onOpenPdfHistory: () => void;
+  onOpenBatchExport: () => void;
   onOpenPlatformGuide: () => void;
   onOpenReadme: () => void;
   onOpenFlashcards: () => void;
@@ -38,6 +40,7 @@ export const Header: React.FC<HeaderProps> = ({
   setPlatformMode,
   onOpenSettings,
   onOpenPdfHistory,
+  onOpenBatchExport,
   onOpenPlatformGuide,
   onOpenReadme,
   onOpenFlashcards,
@@ -157,6 +160,16 @@ export const Header: React.FC<HeaderProps> = ({
               title="View PDF Export Generation History"
             >
               <History className="w-4 h-4 text-purple-400" />
+            </button>
+
+            {/* Batch Multi-Chapter Export Options */}
+            <button
+              onClick={onOpenBatchExport}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/60 text-xs font-semibold shadow-xs transition-all hover:scale-105 active:scale-95"
+              title="Export multiple chapters as individual PDFs or a consolidated volume"
+            >
+              <Package className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="hidden md:inline">Batch Export</span>
             </button>
 
             {/* Server Vector PDF Download Button */}

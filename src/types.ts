@@ -62,11 +62,28 @@ export interface CoverPageConfig {
   date: string;
   accentColor: string;
   style: 'academic' | 'modern' | 'minimal' | 'dark-slate';
+  keywords?: string;
+  subject?: string;
 }
 
 export interface PasswordProtectionConfig {
   enabled: boolean;
   password?: string;
+}
+
+export type WatermarkPosition = 'center' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'grid';
+export type WatermarkType = 'text-svg' | 'stamp-seal' | 'badge' | 'grid';
+
+export interface QrCodeConfig {
+  enabled: boolean;
+  url: string;
+  title: string;
+  subtitle: string;
+  sizePx: number;
+  darkColor: string;
+  lightColor: string;
+  showInPrint: boolean;
+  showUrlText: boolean;
 }
 
 export interface StyleConfig {
@@ -84,7 +101,13 @@ export interface StyleConfig {
   watermarkEnabled: boolean;
   watermarkText: string;
   watermarkOpacity: number;
+  watermarkPosition?: WatermarkPosition;
+  watermarkRotation?: number;
+  watermarkScale?: number;
+  watermarkType?: WatermarkType;
+  watermarkColor?: string;
   passwordProtection?: PasswordProtectionConfig;
+  qrCodeConfig?: QrCodeConfig;
 }
 
 export interface Flashcard {

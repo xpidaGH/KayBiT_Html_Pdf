@@ -26,6 +26,7 @@ interface ChapterSidebarProps {
   onAddChapter: (chapter: Partial<Chapter>) => void;
   onDeleteChapter: (id: string) => void;
   onMoveChapter: (index: number, direction: 'up' | 'down') => void;
+  onReorderChapters?: (sourceIndex: number, destinationIndex: number) => void;
   onResetSamples: () => void;
   onFileUpload: (files: FileList) => void;
 }
@@ -37,12 +38,82 @@ export const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
   onAddChapter,
   onDeleteChapter,
   onMoveChapter,
+  onReorderChapters,
   onResetSamples,
   onFileUpload
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [dragOverPosition, setDragOverPosition] = useState<'above' | 'below' | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDragStart = (e: React.DragEvent, originalIndex: number) => {
+    setDraggedIndex(originalIndex);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', originalIndex.toString());
+  };
+
+  const handleDragOver = (e: React.DragEvent, originalIndex: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    if (draggedIndex === null || draggedIndex === originalIndex) {
+      return;
+    }
+
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const offsetY = e.clientY - rect.top;
+    const position = offsetY < rect.height / 2 ? 'above' : 'below';
+
+    setDragOverIndex(originalIndex);
+    setDragOverPosition(position);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setDragOverIndex(null);
+    setDragOverPosition(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, originalIndex: number) => {
+    e.preventDefault();
+    const sourceIndexStr = e.dataTransfer.getData('text/plain');
+    const sourceIndex = sourceIndexStr !== '' ? parseInt(sourceIndexStr, 10) : draggedIndex;
+
+    if (sourceIndex === null || isNaN(sourceIndex) || sourceIndex < 0) {
+      resetDragState();
+      return;
+    }
+
+    let destIndex = originalIndex;
+    if (dragOverPosition === 'below' && sourceIndex < originalIndex) {
+      destIndex = originalIndex;
+    } else if (dragOverPosition === 'above' && sourceIndex > originalIndex) {
+      destIndex = originalIndex;
+    }
+
+    if (onReorderChapters) {
+      onReorderChapters(sourceIndex, destIndex);
+    } else {
+      const diff = destIndex - sourceIndex;
+      const direction = diff > 0 ? 'down' : 'up';
+      const steps = Math.abs(diff);
+      for (let i = 0; i < steps; i++) {
+        onMoveChapter(sourceIndex + (direction === 'down' ? i : -i), direction);
+      }
+    }
+
+    resetDragState();
+  };
+
+  const resetDragState = () => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+    setDragOverPosition(null);
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -218,17 +289,40 @@ export const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
             const readingTimeMinutes = chapter.metadata?.readingTimeMinutes ?? stats.readingTimeMinutes;
             const snippet = searchQuery ? getSnippet(chapter.content || '', searchQuery) : null;
 
+            const isDragged = draggedIndex === originalIndex;
+            const isDropTargetAbove = dragOverIndex === originalIndex && dragOverPosition === 'above';
+            const isDropTargetBelow = dragOverIndex === originalIndex && dragOverPosition === 'below';
+
             return (
               <div
                 key={chapter.id}
+                draggable={true}
+                onDragStart={(e) => handleDragStart(e, originalIndex)}
+                onDragOver={(e) => handleDragOver(e, originalIndex)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, originalIndex)}
+                onDragEnd={resetDragState}
                 onClick={() => onSelectChapter(chapter.id)}
-                className={`group relative p-3 rounded-xl cursor-pointer transition-all border ${
-                  isActive
-                    ? 'bg-slate-800/90 border-indigo-500/80 shadow-lg text-white'
-                    : 'bg-slate-950/40 hover:bg-slate-800/50 border-slate-800/60 text-slate-300'
+                className={`group relative p-3 rounded-xl cursor-pointer transition-all border select-none ${
+                  isDragged 
+                    ? 'opacity-40 border-dashed border-indigo-500 bg-indigo-950/30 scale-[0.98]' 
+                    : isActive
+                      ? 'bg-slate-800/90 border-indigo-500/80 shadow-lg text-white'
+                      : 'bg-slate-950/40 hover:bg-slate-800/50 border-slate-800/60 text-slate-300'
+                } ${isDropTargetAbove ? 'border-t-2 border-t-indigo-400 bg-indigo-950/40 shadow-md ring-1 ring-indigo-400/40' : ''} ${
+                  isDropTargetBelow ? 'border-b-2 border-b-indigo-400 bg-indigo-950/40 shadow-md ring-1 ring-indigo-400/40' : ''
                 }`}
               >
-                <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start justify-between gap-1.5">
+                  {/* Drag Grip Handle */}
+                  <div 
+                    className="cursor-grab active:cursor-grabbing text-slate-500 group-hover:text-indigo-400 p-0.5 rounded hover:bg-slate-800/80 transition-colors shrink-0 mt-0.5"
+                    title="Drag up or down to reorder chapter"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <GripVertical className="w-3.5 h-3.5" />
+                  </div>
+
                   <div className="flex items-start gap-2 min-w-0 flex-1">
                     <span className="mt-0.5 text-xs font-mono font-bold text-slate-500 group-hover:text-slate-400">
                       #{originalIndex + 1}
@@ -254,7 +348,7 @@ export const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
                   </div>
 
                   {/* Actions Bar */}
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -310,8 +404,11 @@ export const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
       </div>
 
       {/* Drag Drop Hint Footer */}
-      <div className="p-3 border-t border-slate-800 text-[11px] text-slate-500 text-center">
-        Supported: <span className="text-slate-400 font-mono">.html, .txt, .md, .mdx</span>
+      <div className="p-3 border-t border-slate-800 text-[11px] text-slate-400 text-center flex items-center justify-center gap-1.5">
+        <GripVertical className="w-3 h-3 text-indigo-400" />
+        <span>Drag cards to reorder</span>
+        <span className="text-slate-600">•</span>
+        <span className="text-slate-500 font-mono">.html, .txt, .md, .mdx</span>
       </div>
 
     </div>

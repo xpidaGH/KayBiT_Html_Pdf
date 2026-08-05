@@ -5,6 +5,7 @@ import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import puppeteer from "puppeteer";
 import { encryptPDF } from "@pdfsmaller/pdf-encrypt";
+import { PDFDocument } from "pdf-lib";
 
 dotenv.config();
 
@@ -37,6 +38,8 @@ app.post("/api/generate-pdf", async (req, res) => {
     const { 
       html, 
       title = "KayBiT_Notes", 
+      metadata,
+      coverConfig,
       margin = "15mm", 
       displayHeaderFooter = true, 
       format = "A4",
@@ -93,13 +96,40 @@ app.post("/api/generate-pdf", async (req, res) => {
 
       await browser.close();
 
-      let finalPdfBuffer: Buffer = Buffer.from(pdfBuffer);
+      let pdfBytes = Buffer.from(pdfBuffer);
+
+      // Embed custom document metadata (Author, Keywords, Subject, Title) into PDF Structure
+      try {
+        const pdfDoc = await PDFDocument.load(pdfBuffer);
+        const author = metadata?.author || coverConfig?.author || "";
+        const subject = metadata?.subject || coverConfig?.subject || coverConfig?.subtitle || "";
+        const keywords = metadata?.keywords || coverConfig?.keywords || "";
+
+        if (title) pdfDoc.setTitle(title);
+        if (author) pdfDoc.setAuthor(author);
+        if (subject) pdfDoc.setSubject(subject);
+        if (keywords) {
+          const kwList = typeof keywords === "string"
+            ? keywords.split(",").map((k: string) => k.trim()).filter(Boolean)
+            : keywords;
+          pdfDoc.setKeywords(kwList);
+        }
+        pdfDoc.setCreator("KayBiT HTML-to-PDF Studio");
+        pdfDoc.setProducer("KayBiT Vector PDF Engine");
+
+        const savedBytes = await pdfDoc.save();
+        pdfBytes = Buffer.from(savedBytes);
+      } catch (metaErr) {
+        console.warn("Could not set PDF-Lib metadata:", metaErr);
+      }
+
+      let finalPdfBuffer: Buffer = pdfBytes;
 
       // Password protect PDF if enabled
       if (passwordProtection && passwordProtection.enabled && passwordProtection.password) {
         try {
           const encryptedBytes = await encryptPDF(
-            pdfBuffer,
+            pdfBytes,
             passwordProtection.password,
             {
               ownerPassword: passwordProtection.password,

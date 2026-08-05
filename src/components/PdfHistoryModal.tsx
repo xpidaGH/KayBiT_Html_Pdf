@@ -12,7 +12,8 @@ import {
   Server, 
   Printer, 
   Filter,
-  AlertTriangle
+  AlertTriangle,
+  Package
 } from 'lucide-react';
 import { PdfHistoryItem } from '../types';
 
@@ -22,6 +23,7 @@ interface PdfHistoryModalProps {
   history: PdfHistoryItem[];
   onClearHistory: () => void;
   onDeleteHistoryItem: (id: string) => void;
+  onOpenBatchExport?: () => void;
 }
 
 export const PdfHistoryModal: React.FC<PdfHistoryModalProps> = ({
@@ -29,7 +31,8 @@ export const PdfHistoryModal: React.FC<PdfHistoryModalProps> = ({
   onClose,
   history,
   onClearHistory,
-  onDeleteHistoryItem
+  onDeleteHistoryItem,
+  onOpenBatchExport
 }) => {
   const [filter, setFilter] = useState<'all' | 'success' | 'failed'>('all');
 
@@ -124,16 +127,32 @@ export const PdfHistoryModal: React.FC<PdfHistoryModalProps> = ({
             </button>
           </div>
 
-          {history.length > 0 && (
-            <button
-              onClick={onClearHistory}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 border border-slate-700/60 hover:border-rose-800 transition-all text-xs"
-              title="Clear all export history logs"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Clear Log</span>
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {onOpenBatchExport && (
+              <button
+                onClick={() => {
+                  onClose();
+                  onOpenBatchExport();
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-all shadow-md"
+                title="Export multiple chapters as individual PDFs or a consolidated volume"
+              >
+                <Package className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Batch Export</span>
+              </button>
+            )}
+
+            {history.length > 0 && (
+              <button
+                onClick={onClearHistory}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 border border-slate-700/60 hover:border-rose-800 transition-all text-xs"
+                title="Clear all export history logs"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Clear Log</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* History Item List */}

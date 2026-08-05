@@ -18,6 +18,8 @@ import { FlashcardsView } from './components/FlashcardsView';
 import { PlatformModal } from './components/PlatformModal';
 import { ReadmeModal } from './components/ReadmeModal';
 import { PdfHistoryModal } from './components/PdfHistoryModal';
+import { BatchExportModal } from './components/BatchExportModal';
+import { FloatingTocButton } from './components/FloatingTocButton';
 import { calculateReadingStats } from './lib/parser';
 
 export default function App() {
@@ -62,12 +64,19 @@ export default function App() {
   }, [chapters]);
   const [platformMode, setPlatformMode] = useState<PlatformMode>('web');
 
+  // Focus Mode state (expands PDF Preview to fill screen width)
+  const [isFocusMode, setIsFocusMode] = useState(false);
+
   // Modals state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isPdfHistoryOpen, setIsPdfHistoryOpen] = useState(false);
+  const [isBatchExportOpen, setIsBatchExportOpen] = useState(false);
   const [isPlatformGuideOpen, setIsPlatformGuideOpen] = useState(false);
   const [isReadmeOpen, setIsReadmeOpen] = useState(false);
   const [isFlashcardsOpen, setIsFlashcardsOpen] = useState(false);
+
+  // Export progress state
+  const [exportProgress, setExportProgress] = useState<{ current: number; total: number; currentChapterTitle: string } | null>(null);
 
   // PDF Export History State (persisted in localStorage)
   const [pdfHistory, setPdfHistory] = useState<PdfHistoryItem[]>(() => {
@@ -98,7 +107,23 @@ export default function App() {
     primaryColor: '#4f46e5',
     watermarkEnabled: false,
     watermarkText: 'CONFIDENTIAL',
-    watermarkOpacity: 0.12
+    watermarkOpacity: 0.12,
+    watermarkPosition: 'center',
+    watermarkRotation: -45,
+    watermarkScale: 1.0,
+    watermarkType: 'text-svg',
+    watermarkColor: '#0f172a',
+    qrCodeConfig: {
+      enabled: true,
+      url: typeof window !== 'undefined' ? window.location.href : 'https://ais-dev-r5oaf3sq7af4t6lpb5a6kz-413914693725.europe-west3.run.app',
+      title: 'Scan for Mobile HTML Companion & Interactive Bundle',
+      subtitle: 'Scan with your smartphone camera to access the live responsive HTML bundle, code snippets, flashcards, and AI study guide.',
+      sizePx: 150,
+      darkColor: '#0f172a',
+      lightColor: '#ffffff',
+      showInPrint: true,
+      showUrlText: true
+    }
   });
 
   // Cover Page Settings
@@ -111,7 +136,9 @@ export default function App() {
     courseCode: 'CS101 / CS201 / CS305',
     date: new Date().toISOString().split('T')[0],
     accentColor: '#4f46e5',
-    style: 'academic'
+    style: 'academic',
+    keywords: 'Computer Science, Algorithms, Data Structures, React, Study Notes',
+    subject: 'High-Yield Computer Science Reference & Notes'
   });
 
   // Generated Flashcards state
@@ -187,6 +214,16 @@ export default function App() {
     const [moved] = updated.splice(index, 1);
     updated.splice(targetIndex, 0, moved);
     setChapters(updated);
+  };
+
+  const handleReorderChapters = (sourceIndex: number, destinationIndex: number) => {
+    if (sourceIndex === destinationIndex || sourceIndex < 0 || destinationIndex < 0) return;
+    setChapters(prev => {
+      const updated = [...prev];
+      const [moved] = updated.splice(sourceIndex, 1);
+      updated.splice(destinationIndex, 0, moved);
+      return updated;
+    });
   };
 
   const handleResetSamples = () => {
@@ -328,13 +365,21 @@ export default function App() {
     setIsPdfGenerating(true);
 
     try {
-      // Build self-contained HTML document string with styles
+      // Build self-contained HTML document string with styles and PDF metadata
+      const authorMeta = coverConfig.author || 'KayBiT User';
+      const subjectMeta = coverConfig.subject || coverConfig.subtitle || 'Study Notes & Reference Guide';
+      const keywordsMeta = coverConfig.keywords || `${coverConfig.title}, ${coverConfig.courseCode}, PDF, Study Notes`;
+
       const fullHtml = `
         <!DOCTYPE html>
         <html>
           <head>
             <meta charset="utf-8" />
             <title>${coverConfig.title}</title>
+            <meta name="author" content="${authorMeta}" />
+            <meta name="subject" content="${subjectMeta}" />
+            <meta name="keywords" content="${keywordsMeta}" />
+            <meta name="description" content="${subjectMeta}" />
             <script src="https://cdn.tailwindcss.com"></script>
             <style>
               body {
@@ -379,6 +424,12 @@ export default function App() {
         body: JSON.stringify({
           html: fullHtml,
           title: coverConfig.title || 'KayBiT_Notes',
+          metadata: {
+            author: authorMeta,
+            subject: subjectMeta,
+            keywords: keywordsMeta
+          },
+          coverConfig: coverConfig,
           margin: `${styleConfig.pageMarginMm}mm`,
           displayHeaderFooter: styleConfig.showPageNumbers,
           format: styleConfig.pageFormat,
@@ -453,6 +504,208 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  // Batch Export Handler (Consolidated Volume or Individual Chapter PDFs)
+  const handleExportBatch = async (options: {
+    mode: 'consolidated' | 'individual';
+    selectedChapterIds: string[];
+    customTitle?: string;
+  }) => {
+    const { mode, selectedChapterIds, customTitle } = options;
+    if (selectedChapterIds.length === 0) return;
+
+    setIsPdfGenerating(true);
+
+    const selectedChapters = chapters.filter(c => selectedChapterIds.includes(c.id));
+    const titleToUse = customTitle || coverConfig.title || 'KayBiT_Notes';
+
+    try {
+      if (mode === 'consolidated') {
+        setExportProgress({
+          current: 1,
+          total: 1,
+          currentChapterTitle: `Consolidated Volume (${selectedChapters.length} Chapters)`
+        });
+
+        const renderNode = document.getElementById('pdf-render-root');
+        const htmlToUse = renderNode ? renderNode.innerHTML : '';
+
+        const fullHtml = `
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta charset="utf-8" />
+              <title>${titleToUse}</title>
+              <script src="https://cdn.tailwindcss.com"></script>
+              <style>
+                body {
+                  font-family: system-ui, -apple-system, sans-serif;
+                  background-color: white !important;
+                  color: #0f172a !important;
+                  padding: 0;
+                  margin: 0;
+                }
+                .no-print { display: none !important; }
+                .print-page-break { page-break-after: always; break-after: page; }
+                .prevent-break, .code-block-wrapper, .note-callout, table, tr {
+                  page-break-inside: avoid;
+                  break-inside: avoid;
+                }
+              </style>
+            </head>
+            <body>
+              <div style="padding: 20px;">
+                ${htmlToUse}
+              </div>
+            </body>
+          </html>
+        `;
+
+        const exportFileName = `${titleToUse.replace(/[^a-zA-Z0-9_-]/g, '_')}_Consolidated.pdf`;
+
+        const response = await fetch('/api/generate-pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            html: fullHtml,
+            title: titleToUse,
+            margin: `${styleConfig.pageMarginMm}mm`,
+            displayHeaderFooter: styleConfig.showPageNumbers,
+            format: styleConfig.pageFormat,
+            passwordProtection: styleConfig.passwordProtection
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Server PDF generation failed with status ${response.status}`);
+        }
+
+        const blob = await response.blob();
+        const fileSizeKb = blob.size / 1024;
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = exportFileName;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+
+        handleAddHistoryItem({
+          filename: exportFileName,
+          status: 'success',
+          exportMethod: 'server',
+          fileSizeKb,
+          passwordProtected: styleConfig.passwordProtection?.enabled && !!styleConfig.passwordProtection?.password,
+          watermarkText: styleConfig.watermarkEnabled ? styleConfig.watermarkText : undefined
+        });
+
+      } else {
+        // Mode: 'individual' - Loop over each selected chapter
+        const total = selectedChapters.length;
+        for (let i = 0; i < total; i++) {
+          const ch = selectedChapters[i];
+          setExportProgress({
+            current: i + 1,
+            total,
+            currentChapterTitle: ch.title
+          });
+
+          const chNode = document.getElementById(`chapter-section-${ch.id}`);
+          const chContentHtml = chNode ? chNode.innerHTML : `<div class="p-6"><h1>${ch.title}</h1><div>${ch.content}</div></div>`;
+
+          const singleChapterHtml = `
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <meta charset="utf-8" />
+                <title>${ch.title}</title>
+                <script src="https://cdn.tailwindcss.com"></script>
+                <style>
+                  body {
+                    font-family: system-ui, -apple-system, sans-serif;
+                    background-color: white !important;
+                    color: #0f172a !important;
+                    padding: 30px;
+                    margin: 0;
+                  }
+                  .no-print { display: none !important; }
+                  .prevent-break, .code-block-wrapper, .note-callout, table, tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                  }
+                </style>
+              </head>
+              <body>
+                <div style="max-width: 800px; margin: 0 auto;">
+                  <div style="border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 24px;">
+                    <span style="font-size: 10px; font-weight: bold; text-transform: uppercase; color: #6366f1; font-family: monospace;">
+                      ${titleToUse} • Chapter ${i + 1}
+                    </span>
+                    <h1 style="font-size: 24px; font-weight: 800; color: #0f172a; margin-top: 4px;">
+                      ${ch.title}
+                    </h1>
+                  </div>
+                  <div>${chContentHtml}</div>
+                </div>
+              </body>
+            </html>
+          `;
+
+          const cleanPrefix = titleToUse.replace(/[^a-zA-Z0-9_-]/g, '_');
+          const cleanChTitle = ch.title.replace(/[^a-zA-Z0-9_-]/g, '_');
+          const exportFileName = `${cleanPrefix}_Ch${i + 1}_${cleanChTitle}.pdf`;
+
+          const response = await fetch('/api/generate-pdf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              html: singleChapterHtml,
+              title: `${ch.title} - ${titleToUse}`,
+              margin: `${styleConfig.pageMarginMm}mm`,
+              displayHeaderFooter: styleConfig.showPageNumbers,
+              format: styleConfig.pageFormat,
+              passwordProtection: styleConfig.passwordProtection
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error(`PDF generation failed for ${ch.title}`);
+          }
+
+          const blob = await response.blob();
+          const fileSizeKb = blob.size / 1024;
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = exportFileName;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+
+          handleAddHistoryItem({
+            filename: exportFileName,
+            status: 'success',
+            exportMethod: 'server',
+            fileSizeKb,
+            passwordProtected: styleConfig.passwordProtection?.enabled && !!styleConfig.passwordProtection?.password,
+            watermarkText: styleConfig.watermarkEnabled ? styleConfig.watermarkText : undefined
+          });
+
+          if (i < total - 1) {
+            await new Promise(r => setTimeout(r, 400));
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error('Batch PDF export error:', err);
+      alert(`Batch PDF export error: ${err.message || 'Error exporting'}`);
+    } finally {
+      setIsPdfGenerating(false);
+      setExportProgress(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-indigo-600 selection:text-white">
       
@@ -462,6 +715,7 @@ export default function App() {
         setPlatformMode={setPlatformMode}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenPdfHistory={() => setIsPdfHistoryOpen(true)}
+        onOpenBatchExport={() => setIsBatchExportOpen(true)}
         onOpenPlatformGuide={() => setIsPlatformGuideOpen(true)}
         onOpenReadme={() => setIsReadmeOpen(true)}
         onOpenFlashcards={() => setIsFlashcardsOpen(true)}
@@ -476,33 +730,41 @@ export default function App() {
       {/* Main Split Layout: Sidebar | Editor | Printable PDF Preview */}
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         
-        {/* Left Sidebar: Chapters & Files */}
-        <ChapterSidebar
-          chapters={chapters}
-          activeChapterId={activeChapterId}
-          onSelectChapter={handleSelectChapter}
-          onAddChapter={handleAddChapter}
-          onDeleteChapter={handleDeleteChapter}
-          onMoveChapter={handleMoveChapter}
-          onResetSamples={handleResetSamples}
-          onFileUpload={handleFileUpload}
-        />
+        {/* Left Sidebar: Chapters & Files (Hidden in Focus Mode) */}
+        {!isFocusMode && (
+          <ChapterSidebar
+            chapters={chapters}
+            activeChapterId={activeChapterId}
+            onSelectChapter={handleSelectChapter}
+            onAddChapter={handleAddChapter}
+            onDeleteChapter={handleDeleteChapter}
+            onMoveChapter={handleMoveChapter}
+            onReorderChapters={handleReorderChapters}
+            onResetSamples={handleResetSamples}
+            onFileUpload={handleFileUpload}
+          />
+        )}
 
-        {/* Center Pane: Live Editor & Metadata Editor */}
-        <EditorView
-          chapter={activeChapter}
-          onUpdateChapter={handleUpdateChapter}
-        />
+        {/* Center Pane: Live Editor & Metadata Editor (Hidden in Focus Mode) */}
+        {!isFocusMode && (
+          <EditorView
+            chapter={activeChapter}
+            onUpdateChapter={handleUpdateChapter}
+          />
+        )}
 
         {/* Right Pane: High-Fidelity Printable PDF Preview */}
         <PdfPreviewView
           chapters={chapters}
           activeChapterId={activeChapterId}
           styleConfig={styleConfig}
+          setStyleConfig={setStyleConfig}
           coverConfig={coverConfig}
           platformMode={platformMode}
           onGenerateServerPdf={handleGenerateServerPdf}
           isPdfGenerating={isPdfGenerating}
+          isFocusMode={isFocusMode}
+          onToggleFocusMode={() => setIsFocusMode(prev => !prev)}
         />
 
       </main>
@@ -541,6 +803,27 @@ export default function App() {
         history={pdfHistory}
         onClearHistory={handleClearHistory}
         onDeleteHistoryItem={handleDeleteHistoryItem}
+        onOpenBatchExport={() => setIsBatchExportOpen(true)}
+      />
+
+      <BatchExportModal
+        isOpen={isBatchExportOpen}
+        onClose={() => setIsBatchExportOpen(false)}
+        chapters={chapters}
+        coverConfig={coverConfig}
+        styleConfig={styleConfig}
+        onExportBatch={handleExportBatch}
+        isPdfGenerating={isPdfGenerating}
+        exportProgress={exportProgress}
+      />
+
+      {/* Floating Table of Contents Button (Visible at all times) */}
+      <FloatingTocButton
+        chapters={chapters}
+        activeChapterId={activeChapterId}
+        onSelectChapter={handleSelectChapter}
+        styleConfig={styleConfig}
+        setStyleConfig={setStyleConfig}
       />
 
     </div>
