@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FileText, 
   Printer, 
@@ -14,7 +14,9 @@ import {
   FileCode,
   Loader2,
   History,
-  Package
+  Package,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 import { PlatformMode } from '../types';
 
@@ -51,6 +53,21 @@ export const Header: React.FC<HeaderProps> = ({
   isAiGenerating,
   isPdfGenerating
 }) => {
+  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   return (
     <header className="bg-slate-900 border-b border-slate-800 text-white sticky top-0 z-40 shadow-xl relative">
       {/* Top Visual Progress Bar during PDF Generation API Call */}
@@ -76,6 +93,17 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="hidden md:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                   v2.5 Hybrid Vector
                 </span>
+                {!isOnline ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse" title="Service Worker caching active - working offline">
+                    <WifiOff className="w-3 h-3 text-amber-400" />
+                    <span>Offline</span>
+                  </span>
+                ) : (
+                  <span className="hidden xl:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" title="Assets cached for offline availability via Service Worker">
+                    <Wifi className="w-3 h-3 text-emerald-400" />
+                    <span>SW Active</span>
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-slate-400 hidden sm:block">
                 Multiplatform Student PDF Programming Notes Compiler
@@ -138,7 +166,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={onOpenFlashcards}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium transition-all"
-              title="Review Interactive Revision Flashcards"
+              title="Review Interactive Revision Flashcards (Ctrl+K / Cmd+K)"
             >
               <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
               <span className="hidden sm:inline">Flashcards</span>
@@ -148,7 +176,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={onOpenSettings}
               className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all hover:text-white"
-              title="PDF Styling & Code Theme Settings"
+              title="PDF Styling & Code Theme Settings (Ctrl+, / Cmd+,)"
             >
               <Sliders className="w-4 h-4" />
             </button>
@@ -157,7 +185,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={onOpenPdfHistory}
               className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all hover:text-white"
-              title="View PDF Export Generation History"
+              title="View PDF Export Generation History (Ctrl+H / Cmd+H)"
             >
               <History className="w-4 h-4 text-purple-400" />
             </button>
@@ -166,7 +194,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={onOpenBatchExport}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/60 text-xs font-semibold shadow-xs transition-all hover:scale-105 active:scale-95"
-              title="Export multiple chapters as individual PDFs or a consolidated volume"
+              title="Export multiple chapters as individual PDFs or a consolidated volume (Ctrl+B / Cmd+B)"
             >
               <Package className="w-3.5 h-3.5 text-indigo-400" />
               <span className="hidden md:inline">Batch Export</span>
@@ -177,7 +205,7 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={onGenerateServerPdf}
               disabled={isPdfGenerating}
               className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/30 transition-all hover:scale-105 active:scale-95 disabled:opacity-80 disabled:cursor-not-allowed"
-              title="Download True Vector PDF rendered by Server Puppeteer Engine"
+              title="Download True Vector PDF rendered by Server Puppeteer Engine (Ctrl+P / Cmd+P)"
             >
               {isPdfGenerating ? (
                 <>
@@ -188,6 +216,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <>
                   <Download className="w-3.5 h-3.5" />
                   <span>Export PDF</span>
+                  <span className="hidden lg:inline text-[10px] bg-indigo-700/80 px-1.5 py-0.5 rounded font-mono text-indigo-100">Ctrl+P</span>
                 </>
               )}
             </button>

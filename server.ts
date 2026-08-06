@@ -32,6 +32,26 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", app: "KayBiT_Html_Pdf", timestamp: new Date().toISOString() });
 });
 
+// Remote Endpoint Chapter Synchronization Endpoint
+app.post("/api/sync-chapters", (req, res) => {
+  try {
+    const { chapters, timestamp } = req.body;
+    if (!Array.isArray(chapters)) {
+      return res.status(400).json({ error: "Invalid payload format: 'chapters' array required" });
+    }
+    console.log(`[Remote Sync API] Successfully synchronized ${chapters.length} chapters at ${timestamp || new Date().toISOString()}`);
+    return res.json({
+      status: "success",
+      message: `Successfully synchronized ${chapters.length} chapters with remote endpoint`,
+      syncedCount: chapters.length,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err: any) {
+    console.error("Remote endpoint sync error:", err);
+    return res.status(500).json({ error: "Failed to process remote chapter sync", details: err?.message });
+  }
+});
+
 // Server-side Puppeteer PDF Generation endpoint (Vector high-fidelity PDF)
 app.post("/api/generate-pdf", async (req, res) => {
   try {

@@ -900,6 +900,15 @@ export const EditorView: React.FC<EditorViewProps> = ({ chapter, onUpdateChapter
               <span>Auto-Detect Languages</span>
             </button>
 
+            <button
+              onClick={() => setIsSmartSplitModalOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-800/60 shrink-0 font-semibold transition-all active:scale-95"
+              title="Automatically split this chapter into smaller sub-chapters based on H2/H3 headings"
+            >
+              <Scissors className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Smart Split</span>
+            </button>
+
             <div className="h-4 w-px bg-slate-800 mx-1 shrink-0" />
 
             <button
@@ -1233,6 +1242,137 @@ export const EditorView: React.FC<EditorViewProps> = ({ chapter, onUpdateChapter
         <div className="fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-xl bg-slate-900 text-white border border-cyan-500/60 shadow-2xl flex items-center gap-2.5 text-xs font-semibold animate-fade-in backdrop-blur-md">
           <CheckCircle className="w-4 h-4 text-cyan-400 shrink-0" />
           <span>{autoDetectToast}</span>
+        </div>
+      )}
+
+      {/* Smart Chapter Splitter Modal */}
+      {isSmartSplitModalOpen && chapter && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            
+            {/* Modal Header */}
+            <div className="p-5 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+                  <Scissors className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-white flex items-center gap-2">
+                    <span>Smart Chapter Splitter</span>
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    Split long chapters into readable sub-chapters by H2 or H3 heading boundaries
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setIsSmartSplitModalOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Split Options */}
+            <div className="p-5 border-b border-slate-800 bg-slate-900/60 space-y-4 text-xs">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Split Boundary Rule</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => setSplitLevel('auto')}
+                    className={`p-2.5 rounded-xl border text-center transition-all ${
+                      splitLevel === 'auto'
+                        ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300 font-bold'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Auto (H2 or H3)
+                  </button>
+                  <button
+                    onClick={() => setSplitLevel('h2')}
+                    className={`p-2.5 rounded-xl border text-center transition-all ${
+                      splitLevel === 'h2'
+                        ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300 font-bold'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Strict H2 (`##`)
+                  </button>
+                  <button
+                    onClick={() => setSplitLevel('h3')}
+                    className={`p-2.5 rounded-xl border text-center transition-all ${
+                      splitLevel === 'h3'
+                        ? 'bg-indigo-600/20 border-indigo-500 text-indigo-300 font-bold'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Strict H3 (`###`)
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="add-part-tags"
+                  checked={addPartTags}
+                  onChange={(e) => setAddPartTags(e.target.checked)}
+                  className="rounded bg-slate-950 border-slate-800 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                />
+                <label htmlFor="add-part-tags" className="text-slate-300 cursor-pointer select-none">
+                  Automatically add sequential "Part 1", "Part 2" topic tags to metadata
+                </label>
+              </div>
+            </div>
+
+            {/* Live Split Preview */}
+            <div className="p-5 overflow-y-auto flex-1 space-y-3 bg-slate-950/40">
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                <span>Split Preview</span>
+                <span className="font-mono text-indigo-400 font-bold">
+                  {performSmartSplit(chapter.title, chapter.content || '', splitLevel).length} {performSmartSplit(chapter.title, chapter.content || '', splitLevel).length === 1 ? 'chapter' : 'chapters'}
+                </span>
+              </h3>
+
+              {performSmartSplit(chapter.title, chapter.content || '', splitLevel).map((sec, idx) => (
+                <div key={idx} className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-white flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-indigo-400" />
+                      <span>{sec.title}</span>
+                    </span>
+                    <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                      Part {idx + 1}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-slate-400">
+                    <span>{sec.wordCount} words</span>
+                    <span>•</span>
+                    <span>~{sec.readingTimeMinutes} min read</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-slate-950 border-t border-slate-800 flex items-center justify-between">
+              <button
+                onClick={() => setIsSmartSplitModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmSmartSplit}
+                className="flex items-center gap-2 px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-lg active:scale-95"
+              >
+                <Scissors className="w-4 h-4" />
+                <span>Confirm Smart Split</span>
+              </button>
+            </div>
+
+          </div>
         </div>
       )}
 

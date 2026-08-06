@@ -6,7 +6,8 @@ import {
   Flashcard, 
   PlatformMode, 
   SupportedExtension,
-  PdfHistoryItem
+  PdfHistoryItem,
+  RemoteSyncConfig
 } from './types';
 import { INITIAL_CHAPTERS } from './data/sampleChapters';
 import { Header } from './components/Header';
@@ -21,6 +22,7 @@ import { PdfHistoryModal } from './components/PdfHistoryModal';
 import { BatchExportModal } from './components/BatchExportModal';
 import { FloatingTocButton } from './components/FloatingTocButton';
 import { calculateReadingStats } from './lib/parser';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
 export default function App() {
   // State
@@ -40,7 +42,152 @@ export default function App() {
   });
   const [activeChapterId, setActiveChapterId] = useState<string>('ch-1');
 
-  // Periodic localStorage persistence hook for chapters
+  // PDF & Page Styling Settings
+  const [styleConfig, setStyleConfig] = useState<StyleConfig>(() => {
+    let savedRemoteSync: RemoteSyncConfig = {
+      enabled: false,
+      apiUrl: '/api/sync-chapters',
+      syncAuthToken: '',
+      autoSync: true,
+      lastSyncStatus: 'idle'
+    };
+    try {
+      const saved = localStorage.getItem('kaybit_remote_sync_config');
+      if (saved) {
+        savedRemoteSync = { ...savedRemoteSync, ...JSON.parse(saved) };
+      }
+    } catch {}
+
+    return {
+      codeTheme: 'dracula',
+      fontPairing: 'sans-mono',
+      fontSizePx: 14,
+      pageFormat: 'A4',
+      pageMarginMm: 15,
+      showLineNumbers: true,
+      showTOC: true,
+      showMetadataHeader: true,
+      showPageNumbers: true,
+      preventSnippetBreaks: true,
+      primaryColor: '#4f46e5',
+      watermarkEnabled: false,
+      watermarkText: 'CONFIDENTIAL',
+      watermarkOpacity: 0.12,
+      watermarkPosition: 'center',
+      watermarkRotation: -45,
+      watermarkScale: 1.0,
+      watermarkType: 'text-svg',
+      watermarkColor: '#0f172a',
+      qrCodeConfig: {
+        enabled: true,
+        url: typeof window !== 'undefined' ? window.location.href : 'https://ais-dev-r5oaf3sq7af4t6lpb5a6kz-413914693725.europe-west3.run.app',
+        title: 'Scan for Mobile HTML Companion & Interactive Bundle',
+        subtitle: 'Scan with your smartphone camera to access the live responsive HTML bundle, code snippets, flashcards, and AI study guide.',
+        sizePx: 150,
+        darkColor: '#0f172a',
+        lightColor: '#ffffff',
+        showInPrint: true,
+        showUrlText: true
+      },
+      remoteSyncConfig: savedRemoteSync
+    };
+  });
+
+  // Remote Endpoint Synchronization Handler
+  const handleSyncRemoteEndpoint = async (overrideUrl?: string, overrideToken?: string) => {
+    const syncCfg = styleConfig.remoteSyncConfig;
+    const apiUrlToUse = (overrideUrl !== undefined ? overrideUrl : syncCfg?.apiUrl) || '/api/sync-chapters';
+    const tokenToUse = overrideToken !== undefined ? overrideToken : syncCfg?.syncAuthToken;
+
+    if (!apiUrlToUse.trim()) {
+      setStyleConfig(prev => ({
+        ...prev,
+        remoteSyncConfig: {
+          ...prev.remoteSyncConfig!,
+          lastSyncStatus: 'error',
+          lastSyncError: 'Please provide a valid remote API Endpoint URL.'
+        }
+      }));
+      return;
+    }
+
+    setStyleConfig(prev => ({
+      ...prev,
+      remoteSyncConfig: {
+        ...prev.remoteSyncConfig!,
+        apiUrl: apiUrlToUse,
+        syncAuthToken: tokenToUse,
+        lastSyncStatus: 'syncing',
+        lastSyncError: undefined
+      }
+    }));
+
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      if (tokenToUse && tokenToUse.trim()) {
+        headers['Authorization'] = tokenToUse.startsWith('Bearer ') ? tokenToUse : `Bearer ${tokenToUse}`;
+      }
+
+      const response = await fetch(apiUrlToUse.trim(), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          chapters,
+          timestamp: new Date().toISOString(),
+          totalChapters: chapters.length,
+          appVersion: '1.0.0'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Remote API endpoint responded with HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json().catch(() => ({}));
+      const nowIso = new Date().toISOString();
+
+      setStyleConfig(prev => {
+        const updatedRemote: RemoteSyncConfig = {
+          ...prev.remoteSyncConfig!,
+          enabled: true,
+          apiUrl: apiUrlToUse,
+          syncAuthToken: tokenToUse,
+          lastSyncedAt: nowIso,
+          lastSyncStatus: 'success',
+          lastSyncError: undefined
+        };
+        try {
+          localStorage.setItem('kaybit_remote_sync_config', JSON.stringify(updatedRemote));
+        } catch {}
+        return {
+          ...prev,
+          remoteSyncConfig: updatedRemote
+        };
+      });
+    } catch (err: any) {
+      console.error('Failed to sync chapter data with remote endpoint:', err);
+      setStyleConfig(prev => {
+        const updatedRemote: RemoteSyncConfig = {
+          ...prev.remoteSyncConfig!,
+          apiUrl: apiUrlToUse,
+          syncAuthToken: tokenToUse,
+          lastSyncStatus: 'error',
+          lastSyncError: err.message || 'Network connection failed'
+        };
+        try {
+          localStorage.setItem('kaybit_remote_sync_config', JSON.stringify(updatedRemote));
+        } catch {}
+        return {
+          ...prev,
+          remoteSyncConfig: updatedRemote
+        };
+      });
+    }
+  };
+
+  // Periodic chapter persistence hook (localStorage & optional Remote Endpoint Sync)
   useEffect(() => {
     const STORAGE_KEY = 'chapters';
 
@@ -55,13 +202,26 @@ export default function App() {
     // Save immediately on state change
     saveToLocalStorage();
 
+    // Trigger optional Remote Endpoint Sync if enabled and autoSync is true
+    let autoSyncTimer: NodeJS.Timeout | undefined;
+    if (
+      styleConfig.remoteSyncConfig?.enabled &&
+      styleConfig.remoteSyncConfig?.autoSync &&
+      styleConfig.remoteSyncConfig?.apiUrl
+    ) {
+      autoSyncTimer = setTimeout(() => {
+        handleSyncRemoteEndpoint();
+      }, 1500);
+    }
+
     // Trigger periodic auto-save interval every 5 seconds to prevent data loss
     const intervalId = setInterval(saveToLocalStorage, 5000);
 
     return () => {
       clearInterval(intervalId);
+      if (autoSyncTimer) clearTimeout(autoSyncTimer);
     };
-  }, [chapters]);
+  }, [chapters, styleConfig.remoteSyncConfig?.enabled, styleConfig.remoteSyncConfig?.autoSync, styleConfig.remoteSyncConfig?.apiUrl]);
   const [platformMode, setPlatformMode] = useState<PlatformMode>('web');
 
   // Focus Mode state (expands PDF Preview to fill screen width)
@@ -92,37 +252,37 @@ export default function App() {
   const [isAiGenerating, setIsAiGenerating] = useState(false);
   const [isPdfGenerating, setIsPdfGenerating] = useState(false);
 
-  // PDF & Page Styling Settings
-  const [styleConfig, setStyleConfig] = useState<StyleConfig>({
-    codeTheme: 'dracula',
-    fontPairing: 'sans-mono',
-    fontSizePx: 14,
-    pageFormat: 'A4',
-    pageMarginMm: 15,
-    showLineNumbers: true,
-    showTOC: true,
-    showMetadataHeader: true,
-    showPageNumbers: true,
-    preventSnippetBreaks: true,
-    primaryColor: '#4f46e5',
-    watermarkEnabled: false,
-    watermarkText: 'CONFIDENTIAL',
-    watermarkOpacity: 0.12,
-    watermarkPosition: 'center',
-    watermarkRotation: -45,
-    watermarkScale: 1.0,
-    watermarkType: 'text-svg',
-    watermarkColor: '#0f172a',
-    qrCodeConfig: {
-      enabled: true,
-      url: typeof window !== 'undefined' ? window.location.href : 'https://ais-dev-r5oaf3sq7af4t6lpb5a6kz-413914693725.europe-west3.run.app',
-      title: 'Scan for Mobile HTML Companion & Interactive Bundle',
-      subtitle: 'Scan with your smartphone camera to access the live responsive HTML bundle, code snippets, flashcards, and AI study guide.',
-      sizePx: 150,
-      darkColor: '#0f172a',
-      lightColor: '#ffffff',
-      showInPrint: true,
-      showUrlText: true
+  // Global Keyboard Shortcuts Hook (Ctrl+P, Ctrl+F, Ctrl+S, Ctrl+,, Ctrl+H, Ctrl+B, Ctrl+K, Escape)
+  useKeyboardShortcuts({
+    onGeneratePdf: () => {
+      handleGenerateServerPdf();
+    },
+    onToggleFocusMode: () => {
+      setIsFocusMode(prev => !prev);
+    },
+    onSyncSave: () => {
+      handleSyncRemoteEndpoint();
+    },
+    onOpenSettings: () => {
+      setIsSettingsOpen(prev => !prev);
+    },
+    onOpenHistory: () => {
+      setIsPdfHistoryOpen(prev => !prev);
+    },
+    onOpenBatchExport: () => {
+      setIsBatchExportOpen(prev => !prev);
+    },
+    onOpenFlashcards: () => {
+      setIsFlashcardsOpen(prev => !prev);
+    },
+    onCloseModals: () => {
+      setIsSettingsOpen(false);
+      setIsPdfHistoryOpen(false);
+      setIsBatchExportOpen(false);
+      setIsPlatformGuideOpen(false);
+      setIsReadmeOpen(false);
+      setIsFlashcardsOpen(false);
+      setIsFocusMode(false);
     }
   });
 
@@ -328,12 +488,56 @@ export default function App() {
       timestamp: new Date().toISOString()
     };
     setPdfHistory(prev => {
-      const updated = [newItem, ...prev];
+      let updated = [newItem, ...prev];
+
+      // Auto-archive older entries exceeding 50 items to a downloadable JSON file
+      if (updated.length > 50) {
+        const keepItems = updated.slice(0, 50);
+        const archiveItems = updated.slice(50);
+
+        try {
+          const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(archiveItems, null, 2));
+          const downloadAnchor = document.createElement('a');
+          downloadAnchor.setAttribute("href", dataStr);
+          downloadAnchor.setAttribute("download", `pdf_history_archive_${new Date().toISOString().split('T')[0]}.json`);
+          document.body.appendChild(downloadAnchor);
+          downloadAnchor.click();
+          downloadAnchor.remove();
+        } catch (e) {
+          console.error('Failed to trigger history auto-archive download:', e);
+        }
+
+        updated = keepItems;
+      }
+
       try {
         localStorage.setItem('kaybit_pdf_history', JSON.stringify(updated));
       } catch (e) {
         console.error('Failed to save PDF history:', e);
       }
+      return updated;
+    });
+  };
+
+  const handleSplitChapter = (chapterId: string, newChaptersPartial: Partial<Chapter>[]) => {
+    setChapters(prev => {
+      const targetIdx = prev.findIndex(c => c.id === chapterId);
+      if (targetIdx === -1) return prev;
+      const original = prev[targetIdx];
+
+      const replacementChapters: Chapter[] = newChaptersPartial.map((part, idx) => ({
+        id: idx === 0 ? original.id : `ch-split-${Date.now()}-${idx}`,
+        title: part.title || `${original.title} (Part ${idx + 1})`,
+        extension: original.extension,
+        content: part.content || '',
+        order: original.order + idx,
+        metadata: part.metadata || original.metadata,
+        aiSummary: idx === 0 ? original.aiSummary : undefined,
+        keyTakeaways: idx === 0 ? original.keyTakeaways : undefined
+      }));
+
+      const updated = [...prev];
+      updated.splice(targetIdx, 1, ...replacementChapters);
       return updated;
     });
   };
@@ -750,6 +954,7 @@ export default function App() {
           <EditorView
             chapter={activeChapter}
             onUpdateChapter={handleUpdateChapter}
+            onSplitChapter={handleSplitChapter}
           />
         )}
 
@@ -777,6 +982,7 @@ export default function App() {
         setStyleConfig={setStyleConfig}
         coverConfig={coverConfig}
         setCoverConfig={setCoverConfig}
+        onSyncRemote={handleSyncRemoteEndpoint}
       />
 
       <FlashcardsView

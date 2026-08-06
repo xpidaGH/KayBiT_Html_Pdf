@@ -18,9 +18,18 @@ import {
   Globe,
   RefreshCw,
   Key,
-  ShieldCheck
+  ShieldCheck,
+  Cloud,
+  CloudCheck,
+  CloudOff,
+  CloudRain,
+  Server,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  Send
 } from 'lucide-react';
-import { StyleConfig, CoverPageConfig, CodeTheme } from '../types';
+import { StyleConfig, CoverPageConfig, CodeTheme, RemoteSyncConfig } from '../types';
 import { CODE_THEMES } from '../lib/prismThemes';
 
 interface SettingsModalProps {
@@ -30,6 +39,7 @@ interface SettingsModalProps {
   setStyleConfig: React.Dispatch<React.SetStateAction<StyleConfig>>;
   coverConfig: CoverPageConfig;
   setCoverConfig: React.Dispatch<React.SetStateAction<CoverPageConfig>>;
+  onSyncRemote?: (apiUrl?: string, token?: string) => Promise<void>;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -38,9 +48,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   styleConfig,
   setStyleConfig,
   coverConfig,
-  setCoverConfig
+  setCoverConfig,
+  onSyncRemote
 }) => {
   const [showPdfPassword, setShowPdfPassword] = React.useState(false);
+  const [showSyncToken, setShowSyncToken] = React.useState(false);
+  const [showPayloadPreview, setShowPayloadPreview] = React.useState(false);
 
   if (!isOpen) return null;
 
@@ -683,6 +696,271 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <p className="text-[11px] text-slate-500">
                   📱 Automatically injects a camera-scannable QR code section on the last page of the compiled PDF so readers can scan with any phone to open the full interactive HTML bundle.
                 </p>
+              </div>
+            )}
+          </div>
+
+          {/* Section 8: Remote API Endpoint Chapter Synchronization */}
+          <div className="pt-4 border-t border-slate-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                <Globe className="w-4 h-4 text-sky-400" />
+                <span>Remote API Chapter Synchronization</span>
+              </label>
+              <label className="flex items-center gap-2 text-xs text-sky-300 font-semibold cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={styleConfig.remoteSyncConfig?.enabled ?? false}
+                  onChange={(e) => {
+                    const isChecked = e.target.checked;
+                    setStyleConfig(prev => {
+                      const updatedRemote: RemoteSyncConfig = {
+                        enabled: isChecked,
+                        apiUrl: prev.remoteSyncConfig?.apiUrl || '/api/sync-chapters',
+                        syncAuthToken: prev.remoteSyncConfig?.syncAuthToken || '',
+                        autoSync: prev.remoteSyncConfig?.autoSync ?? true,
+                        lastSyncStatus: prev.remoteSyncConfig?.lastSyncStatus || 'idle'
+                      };
+                      try {
+                        localStorage.setItem('kaybit_remote_sync_config', JSON.stringify(updatedRemote));
+                      } catch {}
+                      return {
+                        ...prev,
+                        remoteSyncConfig: updatedRemote
+                      };
+                    });
+                  }}
+                  className="rounded bg-slate-900 border-slate-700 text-sky-600 focus:ring-0"
+                />
+                <span>Enable Remote Sync</span>
+              </label>
+            </div>
+
+            {(styleConfig.remoteSyncConfig?.enabled ?? false) && (
+              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-4">
+                
+                {/* Sync Status Badge */}
+                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs">
+                  <div className="flex items-center gap-2.5">
+                    {styleConfig.remoteSyncConfig?.lastSyncStatus === 'syncing' ? (
+                      <Loader2 className="w-4 h-4 text-sky-400 animate-spin" />
+                    ) : styleConfig.remoteSyncConfig?.lastSyncStatus === 'success' ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    ) : styleConfig.remoteSyncConfig?.lastSyncStatus === 'error' ? (
+                      <AlertCircle className="w-4 h-4 text-rose-400" />
+                    ) : (
+                      <Server className="w-4 h-4 text-slate-400" />
+                    )}
+
+                    <div>
+                      <span className="font-bold text-slate-200 block">
+                        {styleConfig.remoteSyncConfig?.lastSyncStatus === 'syncing' && 'Syncing chapters with remote API...'}
+                        {styleConfig.remoteSyncConfig?.lastSyncStatus === 'success' && 'Remote Sync Active & Ready'}
+                        {styleConfig.remoteSyncConfig?.lastSyncStatus === 'error' && 'Remote Sync Error'}
+                        {(!styleConfig.remoteSyncConfig?.lastSyncStatus || styleConfig.remoteSyncConfig?.lastSyncStatus === 'idle') && 'Remote Sync Idle'}
+                      </span>
+                      {styleConfig.remoteSyncConfig?.lastSyncedAt && (
+                        <span className="text-[11px] text-slate-400">
+                          Last successful sync: {new Date(styleConfig.remoteSyncConfig.lastSyncedAt).toLocaleTimeString()} ({new Date(styleConfig.remoteSyncConfig.lastSyncedAt).toLocaleDateString()})
+                        </span>
+                      )}
+                      {styleConfig.remoteSyncConfig?.lastSyncError && (
+                        <span className="text-[11px] text-rose-400 block font-mono">
+                          {styleConfig.remoteSyncConfig.lastSyncError}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onSyncRemote) {
+                        onSyncRemote(
+                          styleConfig.remoteSyncConfig?.apiUrl,
+                          styleConfig.remoteSyncConfig?.syncAuthToken
+                        );
+                      }
+                    }}
+                    disabled={styleConfig.remoteSyncConfig?.lastSyncStatus === 'syncing'}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 disabled:bg-slate-800 text-white font-bold text-xs shadow-md transition-all active:scale-95 shrink-0"
+                  >
+                    {styleConfig.remoteSyncConfig?.lastSyncStatus === 'syncing' ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Send className="w-3.5 h-3.5" />
+                    )}
+                    <span>Sync Now</span>
+                  </button>
+                </div>
+
+                {/* Endpoint URL Input */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                      <Server className="w-3.5 h-3.5 text-sky-400" />
+                      <span>Remote API Endpoint URL</span>
+                    </label>
+                    <span className="text-[10px] text-slate-500 font-mono">POST HTTP JSON</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={styleConfig.remoteSyncConfig?.apiUrl || ''}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setStyleConfig(prev => {
+                        const updatedRemote: RemoteSyncConfig = {
+                          ...prev.remoteSyncConfig!,
+                          enabled: true,
+                          apiUrl: val
+                        };
+                        try {
+                          localStorage.setItem('kaybit_remote_sync_config', JSON.stringify(updatedRemote));
+                        } catch {}
+                        return {
+                          ...prev,
+                          remoteSyncConfig: updatedRemote
+                        };
+                      });
+                    }}
+                    placeholder="e.g. https://api.yourdomain.com/v1/chapters or /api/sync-chapters"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-sky-300 font-mono outline-none focus:border-sky-500"
+                  />
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <span className="text-[10px] text-slate-500 font-medium">Quick Endpoints:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStyleConfig(prev => {
+                          const updatedRemote: RemoteSyncConfig = {
+                            ...prev.remoteSyncConfig!,
+                            enabled: true,
+                            apiUrl: '/api/sync-chapters'
+                          };
+                          try {
+                            localStorage.setItem('kaybit_remote_sync_config', JSON.stringify(updatedRemote));
+                          } catch {}
+                          return {
+                            ...prev,
+                            remoteSyncConfig: updatedRemote
+                          };
+                        });
+                      }}
+                      className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-900 border border-slate-800 text-sky-400 hover:text-white transition-all"
+                    >
+                      /api/sync-chapters (Built-in Express Server)
+                    </button>
+                  </div>
+                </div>
+
+                {/* Bearer / API Auth Token Input */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                      <Key className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Authorization Header Token / API Key (Optional)</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowSyncToken(prev => !prev)}
+                      className="text-[10px] text-slate-400 hover:text-white"
+                    >
+                      {showSyncToken ? 'Hide Token' : 'Show Token'}
+                    </button>
+                  </div>
+                  <input
+                    type={showSyncToken ? 'text' : 'password'}
+                    value={styleConfig.remoteSyncConfig?.syncAuthToken || ''}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setStyleConfig(prev => {
+                        const updatedRemote: RemoteSyncConfig = {
+                          ...prev.remoteSyncConfig!,
+                          enabled: true,
+                          syncAuthToken: val
+                        };
+                        try {
+                          localStorage.setItem('kaybit_remote_sync_config', JSON.stringify(updatedRemote));
+                        } catch {}
+                        return {
+                          ...prev,
+                          remoteSyncConfig: updatedRemote
+                        };
+                      });
+                    }}
+                    placeholder="e.g. Bearer eyJhbGci... or secret-api-key-123"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 font-mono outline-none focus:border-sky-500"
+                  />
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    If specified, sent in request headers as <code className="text-amber-300">Authorization: Bearer [token]</code>.
+                  </p>
+                </div>
+
+                {/* Auto Sync Toggle */}
+                <label className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer hover:border-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={styleConfig.remoteSyncConfig?.autoSync ?? true}
+                    onChange={(e) => {
+                      const isChecked = e.target.checked;
+                      setStyleConfig(prev => {
+                        const updatedRemote: RemoteSyncConfig = {
+                          ...prev.remoteSyncConfig!,
+                          enabled: true,
+                          autoSync: isChecked
+                        };
+                        try {
+                          localStorage.setItem('kaybit_remote_sync_config', JSON.stringify(updatedRemote));
+                        } catch {}
+                        return {
+                          ...prev,
+                          remoteSyncConfig: updatedRemote
+                        };
+                      });
+                    }}
+                    className="rounded bg-slate-950 border-slate-700 text-sky-600 focus:ring-0"
+                  />
+                  <div>
+                    <span className="text-xs font-semibold text-white block">Auto-Sync Remote API on Chapter Changes</span>
+                    <span className="text-[11px] text-slate-400 block">
+                      Automatically sends debounced POST requests whenever chapter content, order, or metadata is edited.
+                    </span>
+                  </div>
+                </label>
+
+                {/* Developer Payload Inspector */}
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowPayloadPreview(prev => !prev)}
+                    className="text-[11px] font-semibold text-sky-400 hover:text-sky-300 underline"
+                  >
+                    {showPayloadPreview ? 'Hide Remote API Payload Format' : 'Inspect Remote API Request JSON Schema'}
+                  </button>
+
+                  {showPayloadPreview && (
+                    <div className="mt-2 p-3 bg-slate-900 border border-slate-800 rounded-xl">
+                      <pre className="text-[10px] font-mono text-emerald-300 whitespace-pre-wrap overflow-x-auto">
+{`// Sent via POST ${styleConfig.remoteSyncConfig?.apiUrl || '/api/sync-chapters'}
+{
+  "chapters": [
+    {
+      "id": "ch-1",
+      "title": "Data Structures",
+      "extension": "md",
+      "content": "# Markdown text...",
+      "metadata": { ... }
+    }
+  ],
+  "timestamp": "${new Date().toISOString()}",
+  "totalChapters": 4,
+  "appVersion": "1.0.0"
+}`}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+
               </div>
             )}
           </div>

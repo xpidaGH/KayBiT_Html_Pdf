@@ -86,6 +86,16 @@ export interface QrCodeConfig {
   showUrlText: boolean;
 }
 
+export interface RemoteSyncConfig {
+  enabled: boolean;
+  apiUrl: string;
+  syncAuthToken?: string;
+  autoSync: boolean;
+  lastSyncedAt?: string;
+  lastSyncStatus?: 'idle' | 'syncing' | 'success' | 'error';
+  lastSyncError?: string;
+}
+
 export interface StyleConfig {
   codeTheme: CodeTheme;
   fontPairing: FontPairing;
@@ -108,6 +118,7 @@ export interface StyleConfig {
   watermarkColor?: string;
   passwordProtection?: PasswordProtectionConfig;
   qrCodeConfig?: QrCodeConfig;
+  remoteSyncConfig?: RemoteSyncConfig;
 }
 
 export interface Flashcard {

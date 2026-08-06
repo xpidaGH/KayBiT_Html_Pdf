@@ -13,7 +13,9 @@ import {
   Printer, 
   Filter,
   AlertTriangle,
-  Package
+  Package,
+  Download,
+  Archive
 } from 'lucide-react';
 import { PdfHistoryItem } from '../types';
 
@@ -24,6 +26,7 @@ interface PdfHistoryModalProps {
   onClearHistory: () => void;
   onDeleteHistoryItem: (id: string) => void;
   onOpenBatchExport?: () => void;
+  onArchiveHistory?: () => void;
 }
 
 export const PdfHistoryModal: React.FC<PdfHistoryModalProps> = ({
@@ -32,11 +35,27 @@ export const PdfHistoryModal: React.FC<PdfHistoryModalProps> = ({
   history,
   onClearHistory,
   onDeleteHistoryItem,
-  onOpenBatchExport
+  onOpenBatchExport,
+  onArchiveHistory
 }) => {
   const [filter, setFilter] = useState<'all' | 'success' | 'failed'>('all');
 
   if (!isOpen) return null;
+
+  const handleDownloadJsonArchive = () => {
+    if (history.length === 0) return;
+    try {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(history, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `pdf_history_export_${new Date().toISOString().split('T')[0]}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    } catch (err) {
+      console.error('Failed downloading history JSON:', err);
+    }
+  };
 
   const filteredHistory = history.filter(item => {
     if (filter === 'success') return item.status === 'success';
@@ -128,6 +147,17 @@ export const PdfHistoryModal: React.FC<PdfHistoryModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {history.length > 0 && (
+              <button
+                onClick={handleDownloadJsonArchive}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-800/60 font-medium text-xs transition-all shadow-md"
+                title="Export current history records as a downloadable JSON file"
+              >
+                <Download className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="hidden sm:inline">Export JSON</span>
+              </button>
+            )}
+
             {onOpenBatchExport && (
               <button
                 onClick={() => {
@@ -264,11 +294,14 @@ export const PdfHistoryModal: React.FC<PdfHistoryModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 bg-slate-950 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
-          <span>Logs stored in local browser state</span>
+        <div className="p-4 bg-slate-950 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-400">
+          <div className="flex items-center gap-1.5 text-slate-400">
+            <Archive className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+            <span>Auto-archive active: Exceeding 50 history items automatically downloads an offline JSON backup to optimize memory.</span>
+          </div>
           <button
             onClick={onClose}
-            className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-medium transition-colors"
+            className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-medium transition-colors shrink-0"
           >
             Close
           </button>
