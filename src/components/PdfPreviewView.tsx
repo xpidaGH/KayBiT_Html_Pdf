@@ -947,7 +947,8 @@ export const PdfPreviewView: React.FC<PdfPreviewViewProps> = ({
   return (
     <div 
       ref={scrollContainerRef}
-      className="flex-1 h-[calc(100vh-4rem)] bg-slate-900/90 overflow-y-auto p-4 sm:p-8 flex justify-center selection:bg-indigo-500 selection:text-white"
+      style={{ backgroundColor: 'var(--bg-canvas)' }}
+      className="flex-1 h-[calc(100vh-4rem)] overflow-y-auto p-4 sm:p-8 flex justify-center selection:bg-indigo-500 selection:text-white transition-colors"
     >
       
       {/* Inject Dynamic Syntax Theme CSS & Print Rules */}

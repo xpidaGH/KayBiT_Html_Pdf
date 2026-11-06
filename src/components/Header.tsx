@@ -16,14 +16,17 @@ import {
   History,
   Package,
   Wifi,
-  WifiOff
+  WifiOff,
+  Palette
 } from 'lucide-react';
 import { PlatformMode } from '../types';
+import { KbtBrandLogo } from './KbtBrandLogo';
 
 interface HeaderProps {
   platformMode: PlatformMode;
   setPlatformMode: (mode: PlatformMode) => void;
   onOpenSettings: () => void;
+  onOpenThemeSettings: () => void;
   onOpenPdfHistory: () => void;
   onOpenBatchExport: () => void;
   onOpenPlatformGuide: () => void;
@@ -41,6 +44,7 @@ export const Header: React.FC<HeaderProps> = ({
   platformMode,
   setPlatformMode,
   onOpenSettings,
+  onOpenThemeSettings,
   onOpenPdfHistory,
   onOpenBatchExport,
   onOpenPlatformGuide,
@@ -69,7 +73,15 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   return (
-    <header className="bg-slate-900 border-b border-slate-800 text-white sticky top-0 z-40 shadow-xl relative">
+    <header
+      className="border-b sticky top-0 z-40 shadow-sm relative transition-colors"
+      style={{
+        backgroundColor: 'var(--bg-surface)',
+        borderColor: 'var(--border-subtle)',
+        color: 'var(--text-primary)',
+        fontFamily: 'var(--font-body)',
+      }}
+    >
       {/* Top Visual Progress Bar during PDF Generation API Call */}
       {isPdfGenerating && (
         <div className="absolute top-0 left-0 right-0 h-1 bg-slate-950 overflow-hidden z-50">
@@ -82,12 +94,16 @@ export const Header: React.FC<HeaderProps> = ({
           
           {/* Logo & Brand */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/20 font-bold text-lg text-white">
-              <FileCode className="w-5 h-5 text-white" />
-            </div>
+            <KbtBrandLogo variant={platformMode} />
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="font-bold text-base sm:text-lg tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
+                <h1
+                  className="font-bold text-base sm:text-lg tracking-tight"
+                  style={{
+                    color: 'var(--text-primary)',
+                    fontFamily: 'var(--font-display)',
+                  }}
+                >
                   KayBiT_Html_Pdf
                 </h1>
                 <span className="hidden md:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
@@ -170,6 +186,22 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
               <span className="hidden sm:inline">Flashcards</span>
+            </button>
+
+            {/* Theme Settings Button */}
+            <button
+              onClick={onOpenThemeSettings}
+              className="flex items-center gap-1.5 px-3 py-1.5 border text-xs font-medium transition-all hover:opacity-90 whitespace-nowrap shrink-0"
+              style={{
+                backgroundColor: 'var(--bg-surface-elevated)',
+                borderColor: 'var(--border-subtle)',
+                color: 'var(--text-primary)',
+                borderRadius: 'var(--radius-button)',
+              }}
+              title="Customize UI Theme (Editorial, Technical, Warm, Dark, Vibrant)"
+            >
+              <Palette className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--accent-primary)' }} />
+              <span className="hidden md:inline">Theme Settings</span>
             </button>
 
             {/* Settings Button */}

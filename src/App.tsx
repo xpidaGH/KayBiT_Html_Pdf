@@ -21,8 +21,10 @@ import { ReadmeModal } from './components/ReadmeModal';
 import { PdfHistoryModal } from './components/PdfHistoryModal';
 import { BatchExportModal } from './components/BatchExportModal';
 import { FloatingTocButton } from './components/FloatingTocButton';
+import { ThemeSettingsModal } from './components/ThemeSettingsModal';
 import { calculateReadingStats } from './lib/parser';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { UiThemeId, getSavedUiTheme, applyUiTheme } from './lib/themes';
 
 export default function App() {
   // State
@@ -229,11 +231,19 @@ export default function App() {
 
   // Modals state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isThemeSettingsOpen, setIsThemeSettingsOpen] = useState(false);
   const [isPdfHistoryOpen, setIsPdfHistoryOpen] = useState(false);
   const [isBatchExportOpen, setIsBatchExportOpen] = useState(false);
   const [isPlatformGuideOpen, setIsPlatformGuideOpen] = useState(false);
   const [isReadmeOpen, setIsReadmeOpen] = useState(false);
   const [isFlashcardsOpen, setIsFlashcardsOpen] = useState(false);
+
+  // UI Theme state (persisted in localStorage)
+  const [uiTheme, setUiTheme] = useState<UiThemeId>(() => getSavedUiTheme());
+
+  useEffect(() => {
+    applyUiTheme(uiTheme);
+  }, [uiTheme]);
 
   // Export progress state
   const [exportProgress, setExportProgress] = useState<{ current: number; total: number; currentChapterTitle: string } | null>(null);
@@ -277,6 +287,7 @@ export default function App() {
     },
     onCloseModals: () => {
       setIsSettingsOpen(false);
+      setIsThemeSettingsOpen(false);
       setIsPdfHistoryOpen(false);
       setIsBatchExportOpen(false);
       setIsPlatformGuideOpen(false);
@@ -911,13 +922,21 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-indigo-600 selection:text-white">
+    <div
+      className="min-h-screen flex flex-col selection:bg-indigo-600 selection:text-white transition-colors"
+      style={{
+        backgroundColor: 'var(--bg-canvas)',
+        color: 'var(--text-primary)',
+        fontFamily: 'var(--font-body)',
+      }}
+    >
       
       {/* Top App Bar */}
       <Header
         platformMode={platformMode}
         setPlatformMode={setPlatformMode}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenThemeSettings={() => setIsThemeSettingsOpen(true)}
         onOpenPdfHistory={() => setIsPdfHistoryOpen(true)}
         onOpenBatchExport={() => setIsBatchExportOpen(true)}
         onOpenPlatformGuide={() => setIsPlatformGuideOpen(true)}
@@ -975,6 +994,13 @@ export default function App() {
       </main>
 
       {/* Modals */}
+      <ThemeSettingsModal
+        isOpen={isThemeSettingsOpen}
+        onClose={() => setIsThemeSettingsOpen(false)}
+        activeTheme={uiTheme}
+        onSelectTheme={(themeId) => setUiTheme(themeId)}
+      />
+
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}

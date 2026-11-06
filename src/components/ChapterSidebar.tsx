@@ -166,29 +166,61 @@ export const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
   });
 
   return (
-    <div className="w-full lg:w-80 bg-slate-900 border-r border-slate-800 flex flex-col h-[calc(100vh-4rem)] text-slate-200">
+    <div
+      className="w-full lg:w-80 border-r flex flex-col h-[calc(100vh-4rem)] transition-colors"
+      style={{
+        backgroundColor: 'var(--bg-surface)',
+        borderColor: 'var(--border-subtle)',
+        color: 'var(--text-primary)',
+        fontFamily: 'var(--font-body)',
+      }}
+    >
       
       {/* Top Header & Upload Actions */}
-      <div className="p-4 border-b border-slate-800 space-y-3">
+      <div
+        className="p-4 border-b space-y-3"
+        style={{ borderColor: 'var(--border-subtle)' }}
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <BookMarked className="w-4 h-4 text-indigo-400" />
-            <h2 className="font-semibold text-sm text-slate-100">Chapters & Documents</h2>
+            <BookMarked className="w-4 h-4" style={{ color: 'var(--accent-primary)' }} />
+            <h2
+              className="font-semibold text-sm"
+              style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}
+            >
+              Chapters & Documents
+            </h2>
           </div>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-mono">
+          <span
+            className="text-xs px-2 py-0.5 font-mono tabular-nums"
+            style={{
+              backgroundColor: 'var(--bg-surface-elevated)',
+              color: 'var(--text-muted)',
+              borderRadius: 'var(--radius-button)',
+            }}
+          >
             {filteredChapters.length} / {chapters.length}
           </span>
         </div>
 
         {/* Search Bar */}
         <div className="relative">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <Search
+            className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+            style={{ color: 'var(--text-muted)' }}
+          />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search chapters or snippets..."
-            className="w-full pl-9 pr-8 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+            className="w-full pl-9 pr-8 py-1.5 border text-xs focus:outline-none transition-colors"
+            style={{
+              backgroundColor: 'var(--bg-input)',
+              borderColor: 'var(--border-subtle)',
+              color: 'var(--text-primary)',
+              borderRadius: 'var(--radius-button)',
+            }}
           />
           {searchQuery && (
             <button
@@ -285,8 +317,8 @@ export const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
           filteredChapters.map(({ chapter, originalIndex }) => {
             const isActive = chapter.id === activeChapterId;
             const stats = calculateReadingStats(chapter.content || '');
-            const wordCount = chapter.metadata?.wordCount ?? stats.wordCount;
-            const readingTimeMinutes = chapter.metadata?.readingTimeMinutes ?? stats.readingTimeMinutes;
+            const wordCount = stats.wordCount;
+            const readingTimeMinutes = stats.readingTimeMinutes;
             const snippet = searchQuery ? getSnippet(chapter.content || '', searchQuery) : null;
 
             const isDragged = draggedIndex === originalIndex;
@@ -303,20 +335,27 @@ export const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
                 onDrop={(e) => handleDrop(e, originalIndex)}
                 onDragEnd={resetDragState}
                 onClick={() => onSelectChapter(chapter.id)}
-                className={`group relative p-3 rounded-xl cursor-pointer transition-all border select-none ${
-                  isDragged 
-                    ? 'opacity-40 border-dashed border-indigo-500 bg-indigo-950/30 scale-[0.98]' 
-                    : isActive
-                      ? 'bg-slate-800/90 border-indigo-500/80 shadow-lg text-white'
-                      : 'bg-slate-950/40 hover:bg-slate-800/50 border-slate-800/60 text-slate-300'
-                } ${isDropTargetAbove ? 'border-t-2 border-t-indigo-400 bg-indigo-950/40 shadow-md ring-1 ring-indigo-400/40' : ''} ${
-                  isDropTargetBelow ? 'border-b-2 border-b-indigo-400 bg-indigo-950/40 shadow-md ring-1 ring-indigo-400/40' : ''
+                style={{
+                  backgroundColor: isActive
+                    ? 'var(--accent-soft)'
+                    : 'var(--bg-surface-elevated)',
+                  borderColor: isActive
+                    ? 'var(--accent-primary)'
+                    : 'var(--border-subtle)',
+                  color: 'var(--text-primary)',
+                  borderRadius: 'var(--radius-card)',
+                }}
+                className={`group relative p-3 cursor-pointer transition-all border select-none ${
+                  isDragged ? 'opacity-40 border-dashed scale-[0.98]' : ''
+                } ${isDropTargetAbove ? 'border-t-2 border-t-indigo-400 shadow-md ring-1 ring-indigo-400/40' : ''} ${
+                  isDropTargetBelow ? 'border-b-2 border-b-indigo-400 shadow-md ring-1 ring-indigo-400/40' : ''
                 }`}
               >
                 <div className="flex items-start justify-between gap-1.5">
                   {/* Drag Grip Handle */}
                   <div 
-                    className="cursor-grab active:cursor-grabbing text-slate-500 group-hover:text-indigo-400 p-0.5 rounded hover:bg-slate-800/80 transition-colors shrink-0 mt-0.5"
+                    className="cursor-grab active:cursor-grabbing p-0.5 rounded transition-colors shrink-0 mt-0.5"
+                    style={{ color: 'var(--text-muted)' }}
                     title="Drag up or down to reorder chapter"
                     onClick={(e) => e.stopPropagation()}
                   >
@@ -324,23 +363,44 @@ export const ChapterSidebar: React.FC<ChapterSidebarProps> = ({
                   </div>
 
                   <div className="flex items-start gap-2 min-w-0 flex-1">
-                    <span className="mt-0.5 text-xs font-mono font-bold text-slate-500 group-hover:text-slate-400">
+                    <span
+                      className="mt-0.5 text-xs font-mono font-bold tabular-nums"
+                      style={{ color: 'var(--text-muted)' }}
+                    >
                       #{originalIndex + 1}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <h3 className="text-xs font-semibold truncate leading-tight">
+                      <h3
+                        className="text-xs font-semibold truncate leading-tight"
+                        style={{
+                          color: 'var(--text-primary)',
+                          fontFamily: 'var(--font-display)',
+                        }}
+                      >
                         {chapter.title}
                       </h3>
-                      <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mt-1.5 text-[10px] text-slate-400">
-                        <span className="uppercase font-mono px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-bold text-indigo-300">
+                      <div
+                        className="flex items-center flex-wrap gap-x-2 gap-y-1 mt-1.5 text-[11px] tabular-nums"
+                        style={{ color: 'var(--text-secondary)' }}
+                      >
+                        <span
+                          className="uppercase font-mono px-1.5 py-0.5 border font-bold text-[10px]"
+                          style={{
+                            backgroundColor: 'var(--bg-surface)',
+                            borderColor: 'var(--border-subtle)',
+                            color: 'var(--accent-primary)',
+                            borderRadius: 'var(--radius-button)',
+                          }}
+                        >
                           {chapter.extension}
                         </span>
-                        <span className="flex items-center gap-1 text-slate-300 font-medium">
-                          <FileText className="w-3 h-3 text-slate-500" />
+                        <span className="flex items-center gap-1 font-medium">
+                          <FileText className="w-3 h-3 shrink-0" style={{ color: 'var(--text-muted)' }} />
                           {wordCount.toLocaleString()} {wordCount === 1 ? 'word' : 'words'}
                         </span>
-                        <span className="flex items-center gap-1 text-slate-300 font-medium">
-                          <Clock className="w-3 h-3 text-slate-500" />
+                        <span aria-hidden="true" style={{ color: 'var(--text-muted)' }}>·</span>
+                        <span className="flex items-center gap-1 font-medium">
+                          <Clock className="w-3 h-3 shrink-0" style={{ color: 'var(--text-muted)' }} />
                           {readingTimeMinutes} min read
                         </span>
                       </div>

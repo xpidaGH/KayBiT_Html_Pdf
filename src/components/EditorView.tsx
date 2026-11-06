@@ -608,10 +608,24 @@ export const EditorView: React.FC<EditorViewProps> = ({ chapter, onUpdateChapter
   };
 
   return (
-    <div className="flex-1 flex flex-col h-[calc(100vh-4rem)] bg-slate-950 border-r border-slate-800 text-slate-200">
+    <div
+      className="flex-1 flex flex-col h-[calc(100vh-4rem)] border-r transition-colors"
+      style={{
+        backgroundColor: 'var(--bg-canvas)',
+        borderColor: 'var(--border-subtle)',
+        color: 'var(--text-primary)',
+        fontFamily: 'var(--font-body)',
+      }}
+    >
       
       {/* Editor Sub-Header & Controls */}
-      <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between gap-3">
+      <div
+        className="p-3 border-b flex items-center justify-between gap-3"
+        style={{
+          backgroundColor: 'var(--bg-surface)',
+          borderColor: 'var(--border-subtle)',
+        }}
+      >
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <input
             type="text"

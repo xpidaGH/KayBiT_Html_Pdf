@@ -10,6 +10,7 @@ import {
   Cpu 
 } from 'lucide-react';
 import { PlatformMode } from '../types';
+import { KbtBrandLogo } from './KbtBrandLogo';
 
 interface PlatformModalProps {
   isOpen: boolean;
@@ -107,6 +108,41 @@ export const PlatformModal: React.FC<PlatformModalProps> = ({
               </p>
             </div>
 
+          </div>
+
+          {/* KBT Brand Logo & App Icon Sizing Showcase */}
+          <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-white">
+                KBT Brand Logo &amp; App Icon Sizing (Squircle Mask)
+              </span>
+              <span className="text-[11px] font-mono text-slate-400">
+                kbt-integration-guide.txt
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 flex items-center gap-3">
+                <KbtBrandLogo variant="desktop" sizeClass="w-7 h-7" />
+                <div>
+                  <div className="text-xs font-semibold text-slate-100">Desktop Title Bar</div>
+                  <div className="text-[11px] text-slate-400">28×28px · Windows / macOS</div>
+                </div>
+              </div>
+              <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 flex items-center gap-3">
+                <KbtBrandLogo variant="mobile" sizeClass="w-8 h-8" />
+                <div>
+                  <div className="text-xs font-semibold text-slate-100">Mobile App Bar</div>
+                  <div className="text-[11px] text-slate-400">32×32px · iOS / Android</div>
+                </div>
+              </div>
+              <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 flex items-center gap-3">
+                <KbtBrandLogo variant="web" sizeClass="w-9 h-9" />
+                <div>
+                  <div className="text-xs font-semibold text-slate-100">Web Header Bar</div>
+                  <div className="text-[11px] text-slate-400">36×36px · Web / PWA</div>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Platform Code Implementation Snippet */}
